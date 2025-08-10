@@ -14,7 +14,7 @@ ALEX_OPTS  = --ghc
 
 # Default goal.
 
-all : Stella/Test
+all : Stella/Main
 
 # Rules for building the parser.
 
@@ -25,6 +25,9 @@ all : Stella/Test
 	${ALEX} ${ALEX_OPTS} $<
 
 Stella/Test : Stella/Abs.hs Stella/Lex.hs Stella/Par.hs Stella/Print.hs Stella/Test.hs
+	${GHC} ${GHC_OPTS} $@
+
+Stella/Main : Stella/Abs.hs Stella/Lex.hs Stella/Par.hs Stella/Print.hs Stella/TypeChecker.hs Stella/Main.hs
 	${GHC} ${GHC_OPTS} $@
 
 # Rules for cleaning generated files.

@@ -1,9 +1,15 @@
 # Project Makefile
 
-.PHONY : bnfc clean
+.PHONY : bnfc clean all clean
+
+all:
+	$(MAKE) -C src all
+
+clean :
+	$(MAKE) -C src clean
 
 bnfc :
 	bnfc -d -m Stella.cf -o src
 
-clean :
+distclean :
 	-rm -rf src/
