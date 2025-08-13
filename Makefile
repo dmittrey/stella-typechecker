@@ -9,7 +9,7 @@ clean :
 	$(MAKE) -C src clean
 
 bnfc :
-	bnfc -d -m Stella.cf -o src
+	bnfc --haskell -d -m Stella.cf -o src
 
 distclean :
 	-rm -rf src/

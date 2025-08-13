@@ -8,7 +8,7 @@ import System.IO          (hPutStrLn, stderr)
 
 import Stella.Abs
 import Stella.Par
-import Stella.ErrM (Err, pattern Ok, pattern Bad)
+import Stella.ErrM (pattern Ok, pattern Bad)
 import Stella.TypeChecker (typeCheck)
 
 main :: IO ()
@@ -18,11 +18,10 @@ main = do
         [file] -> do
             source <- readFile file
             case pProgram (myLexer source) of
-                Ok ast ->
-                    case typeCheck ast of
-                        Ok _    -> putStrLn "Type check OK"
-                        Bad err -> putStrLn $ "Type error: " ++ err
-                Bad err -> putStrLn $ "Parse error: " ++ err
+                Ok ast  -> typeCheck ast
+                Bad err -> do
+                    hPutStrLn stderr $ "Parse error: " ++ err
+                    exitFailure
         _ -> do
             hPutStrLn stderr "Usage: stella <SourceFile>"
             exitFailure
