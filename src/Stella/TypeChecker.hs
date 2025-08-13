@@ -8,7 +8,8 @@ import Control.Monad (foldM)
 import Stella.Abs
 import Stella.ErrM
 
--- Занести проверка/вывод для внутренностей decl?
+-- Интегрировать ErrorCodes
+-- Доделать интеграцию T-Abs, T-App
 
 -- Окружение: имя переменной → её тип
 type Env = [(StellaIdent, Type)]
@@ -16,57 +17,63 @@ type Env = [(StellaIdent, Type)]
 -- Основная точка входа
 typeCheck :: Program -> IO ()
 typeCheck (AProgram _ _ decls) =
-    case checkDecls [] decls of
+    case declsInfer [] decls of
         Left err -> putStrLn $ "Type error: " ++ err
         Right _  -> putStrLn "Type checking passed!"
 
--- Проверка списка деклараций
--- Не текут ли локальные переменные?
-checkDecls :: Env -> [Decl] -> Err Env
-checkDecls env [] = Ok env
-checkDecls env (d:ds) = do
-    tdecl <- declCheck env d
-    let env' = case d of
-            DeclFun _ name _ _ _ _ _ ->
-                (name, tdecl) : env
-            _ -> env
-    checkDecls env' ds
+-- Проверка списка деклараций с запоминанием типов функций
+declsInfer :: Env -> [Decl] -> Err Env
+declsInfer env [] = Ok env
+declsInfer env (d:ds) =
+    case declInfer env d of
+        Ok (name, ty) ->
+            let env' = (name, ty) : env
+            in declsInfer env' ds
+        Bad msg -> Bad msg
 
 -- Проверка одной декларации
 
 -- T-Abs
-declCheck :: Env -> Decl -> Err Type
-declCheck env (DeclFun _ name params _ _ _ body) =
+declInfer :: Env -> Decl -> Err (StellaIdent, Type)
+declInfer env (DeclFun _ name params _ _ _ body) =
+    let paramEnv       = [(ident, t) | AParamDecl ident t <- params]
+        envWithParams  = paramEnv ++ env
+    in case exprInfer envWithParams body of
+        Ok tfunc -> Ok (name, TypeFun [t | AParamDecl _ t <- params] tfunc)
+        Bad msg  -> Bad msg
+
+declInfer _ (DeclFunGeneric _ _ _ _ _ _ _ _) =
+    Bad "DeclFunGeneric not supported"
+declInfer _ (DeclTypeAlias _ _) =
+    Bad "DeclTypeAlias not supported"
+declInfer _ (DeclExceptionType _) =
+    Bad "DeclExceptionType not supported"
+declInfer _ (DeclExceptionVariant _ _) =
+    Bad "DeclExceptionVariant not supported"
+
+declCheck :: Env -> Decl -> Type -> Err Bool
+declCheck env (DeclFun _ name params _ _ _ body) (TypeFun paraml retType) =
     let
         paramEnv = [(ident, t) | AParamDecl ident t <- params]
         envWithParams = paramEnv ++ env
-    in case exprCheck envWithParams body of
-        Ok tfunc  -> Ok (TypeFun [t | AParamDecl _ t <- params] tfunc)
-        Bad msg -> Bad $ show msg
+    in case exprCheck envWithParams body retType of
+        Ok flag ->
+            if (flag == True)
+            then Ok True
+            else Bad $ "Type check err: Body type mismatch: " ++ show retType
+        Bad msg -> Bad msg
 
-declCheck _ (DeclFunGeneric _ _ _ _ _ _ _ _) =
-    Bad "DeclFunGeneric not supported"
-declCheck _ (DeclTypeAlias _ _) =
-    Bad "DeclTypeAlias not supported"
-declCheck _ (DeclExceptionType _) =
-    Bad "DeclExceptionType not supported"
-declCheck _ (DeclExceptionVariant _ _) =
-    Bad "DeclExceptionVariant not supported"
-
--- Проверка выражений
-exprCheck :: Env -> Expr -> Err Type
-
--- Логические выражения
-
+-- Вывод типа выражения
+exprInfer :: Env -> Expr -> Err Type
 -- T-True
-exprCheck _ ConstTrue  = Ok TypeBool
+exprInfer _ ConstTrue  = Ok TypeBool
 -- T-False
-exprCheck _ ConstFalse = Ok TypeBool
+exprInfer _ ConstFalse = Ok TypeBool
 -- T-If
-exprCheck env (If e1 e2 e3) = do
-    t1 <- exprCheck env e1
-    t2 <- exprCheck env e2
-    t3 <- exprCheck env e3
+exprInfer env (If e1 e2 e3) = do
+    t1 <- exprInfer env e1
+    t2 <- exprInfer env e2
+    t3 <- exprInfer env e3
     case t1 of
         TypeBool ->
             if t2 == t3
@@ -74,38 +81,59 @@ exprCheck env (If e1 e2 e3) = do
                 else Bad $ "T-If failed. Types t2 and t3 not matched: " ++ show t2 ++ " vs " ++ show t3
         _ -> Bad $ "T-If failed. Condition is not Bool: " ++ show t1
 
--- Арифметические выражения
-
 -- T-Zero
-exprCheck _ (ConstInt 0) = Ok TypeNat
+exprInfer _ (ConstInt 0) = Ok TypeNat
 -- T-Succ
-exprCheck env (Succ e) = do
-    t <- exprCheck env e
+exprInfer env (Succ e) = do
+    t <- exprInfer env e
     case t of
         TypeNat -> Ok TypeNat
         _       -> Bad $ "T-Succ failed. Expected Nat, got: " ++ show t
 -- T-Pred
-exprCheck env (Pred e) = do
-    t <- exprCheck env e
+exprInfer env (Pred e) = do
+    t <- exprInfer env e
     case t of
         TypeNat -> Ok TypeNat
         _       -> Bad $ "T-Pred failed. Expected Nat, got: " ++ show t
 -- T-IsZero
-exprCheck env (IsZero e) = do
-    t <- exprCheck env e
+exprInfer env (IsZero e) = do
+    t <- exprInfer env e
     case t of
         TypeNat -> Ok TypeBool
         _       -> Bad $ "T-IsZero failed. Expected Nat, got: " ++ show t
 
--- \ - Исчисление
-
 -- T-Var
-exprCheck env (Var ident) =
+exprInfer env (Var ident) =
     case lookup ident env of
         Just t  -> Ok t
         Nothing -> Bad $ "Unbound variable: " ++ show ident
 
 -- T-App
+exprInfer env (Application e (elist : elistxs)) = do
+    t1 <- exprInfer env e
+    t2 <- exprInfer env elist
+    case t1 of
+        TypeFun (arg:args) ret ->
+            if t2 == arg
+                then 
+                    if null elistxs
+                        then Ok ret
+                        else exprInfer env (Application (Application e [elist]) elistxs)
+                else Bad $ "T-App failed. Expected arg type: " ++ show arg ++ ", got: " ++ show t2
+        _ -> Bad $ "T-App failed. Not a function type: " ++ show t1
 
 -- Other
-exprCheck _ e = Bad $ "Not implemented: " ++ show e
+exprInfer _ e =
+    Bad $ "Type infer err: Not implemented yet: " ++ show e
+
+
+exprCheck :: Env -> Expr -> Type -> Err Bool
+exprCheck env (Var ident) exprType =
+    case lookup ident env of
+        Just t  -> 
+            if (t == exprType)
+            then Ok True
+            else Bad $ ("Type mismatch: " ++ show t ++ " vs " ++ show exprType)
+        Nothing -> Bad $ "Unbound variable: " ++ show ident
+
+exprCheck _ e _ = Bad $ "Type check err: Not implemented yet: " ++ show e

@@ -5,6 +5,6 @@ fn increment_twice(n : Nat) -> Bool {
   return succ(succ(n))
 }
 
-fn main(n : Nat) -> Nat {
-  return increment_twice(n)
+fn main(r : Nat) -> Nat {
+  return increment_twice(r)
 }
