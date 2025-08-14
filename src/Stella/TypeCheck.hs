@@ -6,13 +6,23 @@ import Stella.ErrM
 import Data.Maybe
 import Prelude
 
--- Выстроить нормальный design модулей
 -- Порефакторить систему сборки
--- Комментарии
--- Проверить требования для ядра языка
+
+-- Проверить требования для ядра языкаNatRec
+-- Для NatRec вылизать реализацию, в abstraction тупо переиспользование кода DeclFun
+-- Функции как значения первого класса (толькосоднимпараметром): Abstraction
+
+
 -- TypeUnit, ConstUnit              #unit-type
 -- TypeTuple, Tuple, DotTuple       #pairs
 -- TypeRecord, Record, DotRecord    #records
+-- Let, APatternBinding, PatternVar #let-bindings
+-- #type-ascriptions: TypeAsc
+-- #sum-types: TypeSum, Inl, Inr, Match, AMatchCase, PatternInl, PatternInr, PatternVar
+-- #lists: TypeList, List, ConsList, Head, Tail, IsEmpty
+-- #variants:TypeVariant,AVariantFieldType,SomeTyping,Variant,SomeExprData,
+-- PatternVariant, SomePatternData
+-- #fixpoint-combinator: Fix
 
 -- T-Sub??
 

@@ -76,6 +76,27 @@ exprInfer env (IsZero e) = do
         InferOk ty -> InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e TypeNat ty)
 
         InferErr err -> InferErr err
+-- T-NatRec
+exprInfer env (NatRec e1 e2 e3) =
+    let
+        t1 = exprInfer env e1
+        t2 = exprInfer env e2
+        t3 = exprInfer env e3
+    in case t1 of
+        InferOk TypeNat ->
+            case t2 of 
+                InferOk ty2 ->
+                    case t3 of
+                        InferOk (TypeFun [TypeNat] (TypeFun [ty21] ty22)) ->
+                            if (ty2 == ty21 && ty2 == ty22)
+                            then InferOk ty2
+                            else InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e3 (TypeFun [TypeNat] (TypeFun [ty2] ty2)) (TypeFun [TypeNat] (TypeFun [ty21] ty22)))
+                        InferErr err -> InferErr err
+                InferErr err -> InferErr err
+        InferOk ty ->
+            InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e1 TypeNat ty)
+
+        InferErr err -> InferErr err
 
 -- T-Var
 exprInfer env (Var ident) =

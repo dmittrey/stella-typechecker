@@ -23,7 +23,12 @@ typeCheck (AProgram _ _ decls) =
 -- Проходим декларации: сначала выводим тип (declInfer),
 -- добавляем его в env, затем сверяем аннотацию (declCheck).
 declsCheck :: Env -> [Decl] -> Err Env
-declsCheck env [] = Ok env
+-- когда декларации закончились
+declsCheck env [] =
+    case lookup (StellaIdent "main") env of
+        Just _  -> Ok env
+        Nothing -> Bad $ show ERROR_MISSING_MAIN
+-- когда есть ещё декларации
 declsCheck env (d:ds) =
     case declInfer env d of
         Ok (name, ty) ->
