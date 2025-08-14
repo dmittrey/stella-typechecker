@@ -27,7 +27,7 @@ all : Stella/Main
 Stella/Test : Stella/Abs.hs Stella/Lex.hs Stella/Par.hs Stella/Print.hs Stella/Test.hs
 	${GHC} ${GHC_OPTS} $@
 
-Stella/Main : Stella/Abs.hs Stella/Lex.hs Stella/Par.hs Stella/Print.hs Stella/TypeChecker.hs Stella/Main.hs
+Stella/Main : Stella/Abs.hs Stella/Lex.hs Stella/Par.hs Stella/Print.hs Stella/TypeCheck.hs Stella/TypeInfer.hs Stella/Main.hs
 	${GHC} ${GHC_OPTS} $@
 
 # Rules for cleaning generated files.

@@ -9,7 +9,7 @@ import System.IO          (hPutStrLn, stderr)
 import Stella.Abs
 import Stella.Par
 import Stella.ErrM (pattern Ok, pattern Bad)
-import Stella.TypeChecker (typeCheck)
+import Stella.TypeCheck (typeCheck)
 
 main :: IO ()
 main = do
