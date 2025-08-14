@@ -1,53 +1,74 @@
 module Stella.TypeCheck where
 
-import Stella.TypeInfer
-
 import Stella.Abs
 import Stella.ErrM
 
--- Интегрировать ErrorCodes
--- Доделать интеграцию T-App
+import Data.Maybe
+import Prelude
 
--- Основная точка входа
-typeCheck :: Program -> IO ()
-typeCheck (AProgram _ _ decls) =
-    case declsCheck [] decls of
-        Left err -> putStrLn $ "Type error: " ++ err
-        Right _  -> putStrLn "Type checking passed!"
+-- Выстроить нормальный design модулей
+-- Порефакторить систему сборки
+-- Комментарии
+-- Проверить требования для ядра языка
+-- TypeUnit, ConstUnit              #unit-type
+-- TypeTuple, Tuple, DotTuple       #pairs
+-- TypeRecord, Record, DotRecord    #records
 
-declsCheck :: Env -> [Decl] -> Err Env
-declsCheck env [] = Ok env
-declsCheck env (d:ds) =
-    case declInfer env d of
-        Ok (name, ty) ->
-            let env' = (name, ty) : env
-            in
-                case declCheck env d ty of
-                    Ok True -> declsCheck env' ds
-                    Ok False -> Bad $ "Type mismatch for " ++ show name ++ " decl." ++ show ty
-                    Bad msg -> Bad msg
+-- T-Sub??
+
+-- Окружение: имя переменной → её тип
+type Env = [(StellaIdent, Type)]
+
+data CErrType
+    = ERROR_NOT_IMPLEMENTED_YET
+    | ERROR_MISSING_MAIN
+    | ERROR_UNDEFINED_VARIABLE StellaIdent
+    | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
+    | ERROR_NOT_A_FUNCTION
+  deriving (Eq, Ord, Show, Read)
+
+data CheckResult = CheckOk | CheckErr CErrType
+  deriving (Show, Eq)
+
+-- Вспомогательная функция для T-App
+exprListCheck :: Env -> [Expr] -> [Type] -> CheckResult
+exprListCheck env (e:etail) (ty:tys) =
+    case exprCheck env e ty of
+        CheckOk ->
+            exprListCheck env etail tys
+        
+        CheckErr err ->
+            CheckErr err
+
+exprListCheck _ [] [] = CheckOk
+exprListCheck _ _ _ = CheckErr ERROR_NOT_IMPLEMENTED_YET
+
 
 -- T-Abs
-declCheck :: Env -> Decl -> Type -> Err Bool
-declCheck env (DeclFun _ name params retTy _ _ body) (TypeFun paraml retType) =
-    case retTy of
-        NoReturnType -> 
-            if (retType == TypeBottom)
-            then Ok True
-            else Bad $ ("Type mismatch: " ++ show name ++ " expected: " ++ retType ++ ", actual: " ++ TypeBottom)
-        SomeReturnType ty ->
-            if (retType == ty)
-            then Ok True
-            else Bad $ ("Type mismatch: " ++ show name ++ " expected: " ++ retType ++ ", actual: " ++ ty)
+declCheck :: Env -> Decl -> Type -> CheckResult
+declCheck _ (DeclFun _ name _ retAnn _ _ expr) (TypeFun _ retType) =
+    case retAnn of
+        NoReturnType ->
+            if (retType == TypeBottom) -- TODO: Точно ли чекать на TypeBottom?
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION expr TypeBottom retType)
+
+        SomeReturnType annTy ->
+            if retType == annTy
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION expr annTy retType)
+
+declCheck _ d _ = CheckErr ERROR_NOT_IMPLEMENTED_YET
 
 -- T-Var
-exprCheck :: Env -> Expr -> Type -> Err Bool
-exprCheck env (Var ident) exprType =
+exprCheck :: Env -> Expr -> Type -> CheckResult
+exprCheck env expr@(Var ident) expectedTy =
     case lookup ident env of
-        Just t  -> 
-            if (t == exprType)
-            then Ok True
-            else Bad $ ("Type mismatch: " ++ show t ++ " vs " ++ show exprType)
-        Nothing -> Bad $ "Unbound variable: " ++ show ident
+        Just identTy ->
+            if identTy == expectedTy
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION expr expectedTy identTy)
 
-exprCheck _ e _ = Bad $ "Type check err: Not implemented yet: " ++ show e
+        Nothing -> CheckErr (ERROR_UNDEFINED_VARIABLE ident)
+
+exprCheck _ e _ = CheckErr ERROR_NOT_IMPLEMENTED_YET
