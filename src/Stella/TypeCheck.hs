@@ -10,7 +10,6 @@ import Prelude
 -- Порефакторить систему сборки
 -- Насытить TypeCheck чтобы руками не проверять
 
--- TypeUnit, ConstUnit              #unit-type
 -- TypeTuple, Tuple, DotTuple       #pairs
 -- TypeRecord, Record, DotRecord    #records
 

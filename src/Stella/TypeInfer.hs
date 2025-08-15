@@ -123,5 +123,8 @@ exprInfer env (Application e1 e2list) =
 
         InferErr err -> InferErr err
 
+-- T-Unit
+exprInfer _ ConstUnit  = InferOk TypeUnit
+
 -- Other
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
