@@ -34,6 +34,8 @@ Stella/Main : Stella/Abs.hs Stella/Lex.hs Stella/Par.hs Stella/Print.hs Stella/T
 
 clean :
 	-rm -f Stella/*.hi Stella/*.o Stella/*.log Stella/*.aux Stella/*.dvi
+	-rm -f Stella/Test
+	-rm -f Stella/Main
 
 distclean : clean
 	-rm -f Stella/Abs.hs Stella/Abs.hs.bak Stella/ComposOp.hs Stella/ComposOp.hs.bak Stella/Doc.txt Stella/Doc.txt.bak Stella/ErrM.hs Stella/ErrM.hs.bak Stella/Layout.hs Stella/Layout.hs.bak Stella/Lex.x Stella/Lex.x.bak Stella/Par.y Stella/Par.y.bak Stella/Print.hs Stella/Print.hs.bak Stella/Skel.hs Stella/Skel.hs.bak Stella/Test.hs Stella/Test.hs.bak Stella/XML.hs Stella/XML.hs.bak Stella/AST.agda Stella/AST.agda.bak Stella/Parser.agda Stella/Parser.agda.bak Stella/IOLib.agda Stella/IOLib.agda.bak Stella/Main.agda Stella/Main.agda.bak Stella/Stella.dtd Stella/Stella.dtd.bak Stella/Test Stella/Lex.hs Stella/Par.hs Stella/Par.info Stella/ParData.hs Makefile
