@@ -27,6 +27,14 @@ declInfer _ (DeclExceptionVariant _ _) =
     Bad "DeclExceptionVariant not supported"
 
 exprInfer :: Env -> Expr -> InferResult
+-- T-Abs
+exprInfer env (Abstraction params e) =
+    let paramEnv       = [(ident, t) | AParamDecl ident t <- params]
+        envWithParams  = paramEnv ++ env
+    in case exprInfer envWithParams e of
+        InferOk ty -> InferOk (TypeFun [t | AParamDecl _ t <- params] ty)
+        InferErr err -> InferErr err
+
 -- T-True
 exprInfer _ ConstTrue  = InferOk TypeBool
 -- T-False
@@ -116,4 +124,4 @@ exprInfer env (Application e1 e2list) =
         InferErr err -> InferErr err
 
 -- Other
-exprInfer _ e = InferErr ERROR_NOT_IMPLEMENTED_YET
+exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
