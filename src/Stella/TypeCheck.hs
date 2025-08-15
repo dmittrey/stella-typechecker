@@ -6,16 +6,14 @@ import Stella.ErrM
 import Data.Maybe
 import Prelude
 
+-- TODO
 -- Порефакторить систему сборки
-
--- Проверить требования для ядра языкаNatRec
--- Для NatRec вылизать реализацию, в abstraction тупо переиспользование кода DeclFun
--- Функции как значения первого класса (толькосоднимпараметром): Abstraction
-
+-- Насытить TypeCheck чтобы руками не проверять
 
 -- TypeUnit, ConstUnit              #unit-type
 -- TypeTuple, Tuple, DotTuple       #pairs
 -- TypeRecord, Record, DotRecord    #records
+
 -- Let, APatternBinding, PatternVar #let-bindings
 -- #type-ascriptions: TypeAsc
 -- #sum-types: TypeSum, Inl, Inr, Match, AMatchCase, PatternInl, PatternInr, PatternVar
@@ -30,7 +28,9 @@ import Prelude
 type Env = [(StellaIdent, Type)]
 
 data CErrType
-    = ERROR_NOT_IMPLEMENTED_YET
+    = C_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr Type
+    | I_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr
+    | C_ERROR_DECL_NOT_IMPLEMENTED_YET Decl
     | ERROR_MISSING_MAIN
     | ERROR_UNDEFINED_VARIABLE StellaIdent
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
@@ -51,8 +51,6 @@ exprListCheck env (e:etail) (ty:tys) =
             CheckErr err
 
 exprListCheck _ [] [] = CheckOk
-exprListCheck _ _ _ = CheckErr ERROR_NOT_IMPLEMENTED_YET
-
 
 -- T-Abs
 declCheck :: Env -> Decl -> Type -> CheckResult
@@ -68,9 +66,8 @@ declCheck _ (DeclFun _ name _ retAnn _ _ expr) (TypeFun _ retType) =
             then CheckOk
             else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION expr annTy retType)
 
-declCheck _ d _ = CheckErr ERROR_NOT_IMPLEMENTED_YET
+declCheck _ d _ = CheckErr (C_ERROR_DECL_NOT_IMPLEMENTED_YET d)
 
--- T-Var
 exprCheck :: Env -> Expr -> Type -> CheckResult
 exprCheck env expr@(Var ident) expectedTy =
     case lookup ident env of
@@ -81,4 +78,4 @@ exprCheck env expr@(Var ident) expectedTy =
 
         Nothing -> CheckErr (ERROR_UNDEFINED_VARIABLE ident)
 
-exprCheck _ e _ = CheckErr ERROR_NOT_IMPLEMENTED_YET
+exprCheck _ _ _ = CheckOk
