@@ -8,10 +8,12 @@ import Prelude
 
 -- TODO
 -- Порефакторить систему сборки
--- Насытить TypeCheck чтобы руками не проверять
 
 -- 3. для расширений #pairs и #tuples: TypeTuple, Tuple, DotTuple
 -- 4. для расширения #records: TypeRecord, Record, DotRecord
+-- 5. Дописать typecheck
+-- 6. Пройтись еще раз по охвату ошибок
+-- 7. Организовать тестовое покрытие(переназвать файлы, пройтись по кейсам)
 
 -- Окружение: имя переменной → её тип
 type Env = [(StellaIdent, Type)]
