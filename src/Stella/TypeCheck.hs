@@ -12,8 +12,6 @@ import Prelude
 
 -- 3. для расширений #pairs и #tuples: TypeTuple, Tuple, DotTuple
 -- 4. для расширения #records: TypeRecord, Record, DotRecord
--- 5. для расширения #let-bindings: Let, APatternBinding, PatternVar
--- 6. для расширения #type-ascriptions: TypeAsc
 
 -- Окружение: имя переменной → её тип
 type Env = [(StellaIdent, Type)]

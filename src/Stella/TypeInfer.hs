@@ -8,6 +8,40 @@ import Stella.ErrM
 data InferResult = InferOk Type | InferErr CErrType
   deriving (Show, Eq)
 
+-- (-) PatternCastAs Pattern Type
+-- (-) PatternAsc Pattern Type
+-- (-) PatternVariant StellaIdent PatternData
+-- (-) PatternInl Pattern
+-- (-) PatternInr Pattern
+-- (-) PatternTuple [Pattern]
+-- (-) PatternRecord [LabelledPattern]
+-- (-) PatternList [Pattern]
+-- (-) PatternCons Pattern Pattern
+-- (-) PatternFalse
+-- (-) PatternTrue
+-- (-) PatternUnit
+-- (-) PatternInt Integer
+-- (-) PatternSucc Pattern
+-- (+) PatternVar StellaIdent
+updateEnvByBind :: Env -> PatternBinding -> Either CErrType Env
+updateEnvByBind env (APatternBinding (PatternVar ident) e) =
+    case exprInfer env e of
+        InferOk ty -> 
+            Ok (env ++ [(ident, ty)])
+        InferErr err ->
+            Bad err
+
+updateEnvByBind env (APatternBinding _ e) = Ok env
+
+updateEnvByBindings :: Env -> [PatternBinding] -> Either CErrType Env
+updateEnvByBindings env [] = Ok env
+updateEnvByBindings env (x : xs) =
+    case updateEnvByBind env x of
+        Ok newEnv -> 
+            updateEnvByBindings newEnv xs
+        Bad err ->
+            Bad err
+
 declInfer :: Env -> Decl -> Err (StellaIdent, Type)
 -- T-Abs
 declInfer env (DeclFun _ name params _ _ _ body) =
@@ -148,6 +182,19 @@ exprInfer env (TypeAsc e ty) =
         CheckOk ->
             InferOk ty
         CheckErr err ->
+            InferErr err
+
+-- T-Let
+-- 
+-- let x = e1 in e2 => T2
+-- 1. Infer e1 => T1
+-- 2. Add x : T1 to env
+-- 3. Infer e2 => T2 with new env
+exprInfer env (Let bindings e) =
+    case updateEnvByBindings env bindings of
+        Ok env ->
+            exprInfer env e
+        Bad err ->
             InferErr err
 
 -- Other
