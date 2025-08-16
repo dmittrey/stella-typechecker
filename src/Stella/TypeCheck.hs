@@ -48,9 +48,9 @@ declCheck :: Env -> Decl -> Type -> CheckResult
 declCheck _ (DeclFun _ name _ retAnn _ _ expr) (TypeFun _ retType) =
     case retAnn of
         NoReturnType ->
-            if (retType == TypeBottom) -- TODO: Точно ли чекать на TypeBottom?
+            if (retType == TypeUnit)
             then CheckOk
-            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION expr TypeBottom retType)
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION expr TypeUnit retType)
 
         SomeReturnType annTy ->
             if retType == annTy
