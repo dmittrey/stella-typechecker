@@ -126,5 +126,16 @@ exprInfer env (Application e1 e2list) =
 -- T-Unit
 exprInfer _ ConstUnit  = InferOk TypeUnit
 
+-- T-Seq
+-- 
+-- t1 ; t2 => T
+-- 1. Check t1 <= Unit
+-- 2. Infer t2 => T 
+exprInfer env (Sequence e1 e2) =
+    case exprCheck env e1 TypeUnit of
+        CheckOk ->
+            exprInfer env e2
+        CheckErr err ->
+            InferErr err
 -- Other
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
