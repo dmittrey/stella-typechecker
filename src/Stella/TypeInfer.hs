@@ -96,7 +96,7 @@ exprInfer env (NatRec e1 e2 e3) =
                 InferOk ty2 ->
                     case t3 of
                         InferOk (TypeFun [TypeNat] (TypeFun [ty21] ty22)) ->
-                            if (ty2 == ty21 && ty2 == ty22)
+                            if (ty2 == ty21 && ty2 == ty22) --TODO: Migrate to use checkExpr
                             then InferOk ty2
                             else InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e3 (TypeFun [TypeNat] (TypeFun [ty2] ty2)) (TypeFun [TypeNat] (TypeFun [ty21] ty22)))
                         InferErr err -> InferErr err

@@ -10,18 +10,10 @@ import Prelude
 -- Порефакторить систему сборки
 -- Насытить TypeCheck чтобы руками не проверять
 
--- TypeTuple, Tuple, DotTuple       #pairs
--- TypeRecord, Record, DotRecord    #records
-
--- Let, APatternBinding, PatternVar #let-bindings
--- #type-ascriptions: TypeAsc
--- #sum-types: TypeSum, Inl, Inr, Match, AMatchCase, PatternInl, PatternInr, PatternVar
--- #lists: TypeList, List, ConsList, Head, Tail, IsEmpty
--- #variants:TypeVariant,AVariantFieldType,SomeTyping,Variant,SomeExprData,
--- PatternVariant, SomePatternData
--- #fixpoint-combinator: Fix
-
--- T-Sub??
+-- 3. для расширений #pairs и #tuples: TypeTuple, Tuple, DotTuple
+-- 4. для расширения #records: TypeRecord, Record, DotRecord
+-- 5. для расширения #let-bindings: Let, APatternBinding, PatternVar
+-- 6. для расширения #type-ascriptions: TypeAsc
 
 -- Окружение: имя переменной → её тип
 type Env = [(StellaIdent, Type)]
