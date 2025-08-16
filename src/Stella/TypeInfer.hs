@@ -137,5 +137,18 @@ exprInfer env (Sequence e1 e2) =
             exprInfer env e2
         CheckErr err ->
             InferErr err
+
+-- T-Ascribe
+-- 
+-- t as T => T
+-- 1. Check t <= T
+-- 2. Return T
+exprInfer env (TypeAsc e ty) =
+    case exprCheck env e ty of
+        CheckOk ->
+            InferOk ty
+        CheckErr err ->
+            InferErr err
+
 -- Other
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
