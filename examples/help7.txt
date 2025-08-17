@@ -12,7 +12,7 @@ fn twice(f : fn(Bool) -> Bool) -> (fn(Bool) -> Bool) {
     }
 }
 
-fn main(b : Bool) -> Bool {
+fn main(b : Nat) -> Bool {
     return 
-        {0, 0}
+        {true, b}.1
 }
