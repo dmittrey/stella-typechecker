@@ -26,6 +26,9 @@ data CErrType
     | ERROR_UNDEFINED_VARIABLE StellaIdent
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
     | ERROR_NOT_A_FUNCTION
+    | ERROR_NOT_A_TUPLE Expr
+    | ERROR_UNEXPECTED_TUPLE_LENGTH Expr Integer
+    | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
   deriving (Eq, Ord, Show, Read)
 
 data CheckResult = CheckOk | CheckErr CErrType

@@ -8,6 +8,12 @@ import Stella.ErrM
 data InferResult = InferOk Type | InferErr CErrType
   deriving (Show, Eq)
 
+indexInteger :: [a] -> Integer -> Maybe a
+indexInteger xs n
+    | n < 0                         = Nothing
+    | n >= fromIntegral (length xs)  = Nothing
+    | otherwise                     = Just (xs !! fromIntegral n)
+
 -- (-) PatternCastAs Pattern Type
 -- (-) PatternAsc Pattern Type
 -- (-) PatternVariant StellaIdent PatternData
@@ -195,6 +201,38 @@ exprInfer env (Let bindings e) =
         Ok env ->
             exprInfer env e
         Bad err ->
+            InferErr err
+
+-- T-Tuple
+-- 
+-- {t_1,..,t_n} : {T_1,...,T_n}
+-- 1. Infer exprs types
+-- 2. Return TypeTuple instance
+exprInfer env (Tuple exprs) =
+    foldl step (InferOk (TypeTuple [])) exprs
+  where
+    step :: InferResult -> Expr -> InferResult
+    step (InferErr err) _ = InferErr err
+    step (InferOk (TypeTuple acc)) e =
+        case exprInfer env e of
+            InferOk ty   -> InferOk (TypeTuple (acc ++ [ty]))
+            InferErr err -> InferErr err
+
+-- T-Proj
+-- 
+-- t.j => T_j
+-- 1. Infer expr type
+-- 2. Check if it Tuple type
+-- 3. Take idx'th type
+exprInfer env (DotTuple expr idx) =
+    case exprInfer env expr of
+        InferOk (TypeTuple tys) ->
+            case indexInteger tys (idx - 1) of
+                Just t  -> InferOk t
+                Nothing -> InferErr (ERROR_TUPLE_INDEX_OUT_OF_BOUNDS expr idx)
+        InferOk otherTy ->
+            InferErr (ERROR_NOT_A_TUPLE expr)
+        InferErr err ->
             InferErr err
 
 -- Other
