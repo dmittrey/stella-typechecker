@@ -10,7 +10,6 @@ import Stella.Abs
 import Stella.Par
 import Stella.ErrM
 
-import Stella.TypeInfer
 import Stella.TypeCheck
 
 -- Основная точка входа
