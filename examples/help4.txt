@@ -1,5 +1,6 @@
 // sample program in Stella Core
 language core;
+extend with #type-ascriptions;
 
 fn Bool::not(b : Bool) -> Bool {
     return
