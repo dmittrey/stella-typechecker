@@ -235,5 +235,38 @@ exprInfer env (DotTuple expr idx) =
         InferErr err ->
             InferErr err
 
+-- T-Record
+-- 
+-- {l_1 = t_1,..,l_n = t_n} : {l_1 : T_1,...,l_n : T_n}
+-- 1. Infer exprs types
+-- 2. Return TypeRecord instance
+exprInfer env (Record bindings) =
+        foldl step (InferOk (TypeRecord [])) bindings
+    where
+        step :: InferResult -> Binding -> InferResult
+        step (InferOk (TypeRecord acc)) (ABinding ident e) =
+            case exprInfer env e of
+                InferOk ty ->
+                    InferOk (TypeRecord (acc ++ [(ARecordFieldType ident ty)]))
+                InferErr err ->
+                    InferErr err
+
+-- T-RecordProj
+-- 
+-- t.l_j => T_j
+-- 1. Infer t type
+-- 2. Get l_j from inferred type
+exprInfer env (DotRecord expr ident) =
+    case exprInfer env expr of
+        InferOk (TypeRecord fields) ->
+            let identToType = [(ident, t) | ARecordFieldType ident t <- fields]
+            in case lookup ident identToType of
+                Just ty  -> InferOk ty
+                Nothing -> InferErr (ERROR_UNEXPECTED_FIELD_ACCESS expr ident)
+        InferOk otherTy ->
+            InferErr (ERROR_NOT_A_RECORD expr)
+        InferErr err ->
+            InferErr err 
+
 -- Other
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)

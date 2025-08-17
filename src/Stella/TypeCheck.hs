@@ -9,8 +9,6 @@ import Prelude
 -- TODO
 -- Порефакторить систему сборки
 
--- 3. для расширений #pairs и #tuples: TypeTuple, Tuple, DotTuple
--- 4. для расширения #records: TypeRecord, Record, DotRecord
 -- 5. Дописать typecheck
 -- 6. Пройтись еще раз по охвату ошибок
 -- 7. Организовать тестовое покрытие(переназвать файлы, пройтись по кейсам)
@@ -27,8 +25,10 @@ data CErrType
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
     | ERROR_NOT_A_FUNCTION
     | ERROR_NOT_A_TUPLE Expr
+    | ERROR_NOT_A_RECORD Expr
     | ERROR_UNEXPECTED_TUPLE_LENGTH Expr Integer
     | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
+    | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
   deriving (Eq, Ord, Show, Read)
 
 data CheckResult = CheckOk | CheckErr CErrType
