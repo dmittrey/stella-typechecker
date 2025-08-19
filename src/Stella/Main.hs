@@ -15,28 +15,17 @@ import Stella.TypeCheck
 -- Основная точка входа
 typeCheck :: Program -> IO ()
 typeCheck (AProgram _ _ decls) =
-    case declsCheck [] decls of
-        Left err -> putStrLn $ "Type error: " ++ err
-        Right _  -> putStrLn "Type checking passed!"
-
--- Проходим декларации: сначала выводим тип (declInfer),
--- добавляем его в env, затем сверяем аннотацию (declCheck).
-declsCheck :: Env -> [Decl] -> Err Env
--- когда декларации закончились
-declsCheck env [] =
-    case lookup (StellaIdent "main") env of
-        Just _  -> Ok env
-        Nothing -> Bad $ show ERROR_MISSING_MAIN
--- когда есть ещё декларации
-declsCheck env (d:ds) =
-    case declInfer env d of
-        Ok (name, ty) ->
-            let env' = (name, ty) : env
-            in
-                case declCheck env d ty of
-                    CheckOk -> declsCheck env' ds
-                    CheckErr err -> Bad $ show err
-        Bad msg -> Bad msg
+        let env = []
+    in
+        case (foldl step (CheckOk, []) decls) of
+            ((CheckErr err), env) -> putStrLn $ "Type error: " ++ show err
+            (CheckOk, env) -> putStrLn "Type checking passed!"
+    where
+        step :: (CheckResult, Env) -> Decl -> (CheckResult, Env)
+        step (CheckOk, env) decl =
+            declCheck env decl
+        step ((CheckErr err), env) decl =
+            (CheckErr err, env)
 
 main :: IO ()
 main = do

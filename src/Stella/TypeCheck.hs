@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module Stella.TypeCheck where
 
 import Stella.Abs
@@ -9,20 +11,19 @@ import Prelude
 -- TODO
 -- Порефакторить систему сборки
 
+-- 5. Сделать реализацию 
 -- 6. Пройтись еще раз по охвату ошибок
 -- 7. Организовать тестовое покрытие(переназвать файлы, пройтись по кейсам)
 
--- Окружение: имя переменной → её тип
-type Env = [(StellaIdent, Type)]
-
+-- Типы ошибок
 data CErrType
     = C_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr Type
     | I_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr
     | C_ERROR_DECL_NOT_IMPLEMENTED_YET Decl
     | ERROR_MISSING_MAIN
     | ERROR_UNDEFINED_VARIABLE StellaIdent
-    | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
-    | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED Expr Type Type -- Expr Expected Got
+    | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
+    | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
     | ERROR_NOT_A_FUNCTION Expr
     | ERROR_NOT_A_TUPLE Expr
     | ERROR_NOT_A_RECORD Expr
@@ -33,54 +34,58 @@ data CErrType
     | ERROR_UNEXPECTED_LAMBDA Expr Type
   deriving (Eq, Ord, Show, Read)
 
-data CheckResult = CheckOk | CheckErr CErrType
-  deriving (Show, Eq)
+-- Окружение: имя переменной → её тип
+type Env = [(StellaIdent, Type)]
 
+updateEnvByParams :: Env -> [ParamDecl] -> Env
+updateEnvByParams env params =
+    env ++ [(ident, t) | AParamDecl ident t <- params]
+
+-- Результат проверки против типа
+type CheckResult = Either CErrType ()
+
+pattern CheckOk :: CheckResult
+pattern CheckOk = Right ()
+
+pattern CheckErr :: CErrType -> CheckResult
+pattern CheckErr e = Left e
+
+-- Композиция проверок
 (>>>) :: CheckResult -> CheckResult -> CheckResult
 CheckOk      >>> r = r
 CheckErr err >>> _ = CheckErr err
 
--- Вспомогательная функция для T-App
-exprListCheck :: Env -> [Expr] -> [Type] -> CheckResult
-exprListCheck env (e:etail) (ty:tys) =
-    case exprCheck env e ty of
-        CheckOk ->
-            exprListCheck env etail tys
-        
-        CheckErr err ->
-            CheckErr err
+declCheck :: Env -> Decl -> (CheckResult, Env)
+declCheck env (DeclFun _ name [] NoReturnType _ _ expr) =
+    (exprCheck env expr TypeUnit, env)
+declCheck env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
+    (exprCheck env expr retTy, env)
 
-exprListCheck _ [] [] = CheckOk
+declCheck env (DeclFun anns name paramsAnn NoReturnType throwTy decls expr) =
+        let (checkRes, initEnv) = declCheck (updateEnvByParams env paramsAnn) (DeclFun anns name [] NoReturnType throwTy decls expr)
+    in
+        (checkRes, initEnv ++ [(name, TypeFun [t | AParamDecl _ t <- paramsAnn] TypeUnit)])
 
--- T-Abs
-declCheck :: Env -> Decl -> Type -> CheckResult
-declCheck _ (DeclFun _ name _ retAnn _ _ expr) (TypeFun _ retType) =
-    case retAnn of
-        NoReturnType ->
-            if (retType == TypeUnit)
-            then CheckOk
-            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED expr TypeUnit retType)
+declCheck env (DeclFun anns name paramsAnn (SomeReturnType retTy) throwTy decls expr) =
+        let (checkRes, initEnv) = declCheck (updateEnvByParams env paramsAnn) (DeclFun anns name [] (SomeReturnType retTy) throwTy decls expr)
+    in
+        (checkRes, initEnv ++ [(name, TypeFun [t | AParamDecl _ t <- paramsAnn] retTy)])
 
-        SomeReturnType annTy ->
-            if retType == annTy
-            then CheckOk
-            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED expr annTy retType)
-
-declCheck _ d _ = CheckErr (C_ERROR_DECL_NOT_IMPLEMENTED_YET d)
+declCheck e d = (CheckErr (C_ERROR_DECL_NOT_IMPLEMENTED_YET d), e)
 
 exprCheck :: Env -> Expr -> Type -> CheckResult
 
 -- ====== T-True ======
 exprCheck _ ConstTrue TypeBool =
     CheckOk
-exprCheck _ ConstTrue t = CheckOk
-    -- CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED ConstTrue TypeBool t)
+exprCheck _ ConstTrue t =
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION ConstTrue TypeBool t)
 
 -- ====== T-False ======
 exprCheck _ ConstFalse TypeBool =
     CheckOk
-exprCheck _ ConstFalse t = CheckOk
-    -- CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED ConstFalse TypeBool t)
+exprCheck _ ConstFalse t =
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION ConstFalse TypeBool t)
 
 -- ====== T-If ======
 exprCheck env (If e1 e2 e3) t = do
@@ -92,25 +97,25 @@ exprCheck env (If e1 e2 e3) t = do
 exprCheck _ (ConstInt 0) TypeNat =
     CheckOk
 exprCheck _ (ConstInt 0) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED (ConstInt 0) TypeNat t)
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstInt 0) TypeNat t)
 
 -- ====== T-Succ ======
 exprCheck env (Succ e) TypeNat =
     exprCheck env e TypeNat
 exprCheck env (Succ e) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED (Succ e) TypeNat t)
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Succ e) TypeNat t)
 
 -- ====== T-Pred ======
 exprCheck env (Pred e) TypeNat =
     exprCheck env e TypeNat
 exprCheck env (Pred e) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED (Pred e) TypeNat t)
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Pred e) TypeNat t)
 
 -- ====== T-IsZero ======
 exprCheck env (IsZero e) TypeBool =
     exprCheck env e TypeNat
 exprCheck env (IsZero e) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED (IsZero e) TypeBool t)
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (IsZero e) TypeBool t)
 
 -- ====== T-Var ======
 exprCheck env (Var ident) t =
@@ -118,7 +123,7 @@ exprCheck env (Var ident) t =
         Just ty ->
             if (ty == t)
             then CheckOk
-            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED (Var ident) t ty)
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Var ident) t ty)
         Nothing -> CheckErr (ERROR_UNDEFINED_VARIABLE ident)
 
 -- ====== T-Abs ======
@@ -128,11 +133,11 @@ exprCheck env (Abstraction [] e) (TypeFun [] retTy) =
 
 -- Check for length match of params and their types(ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION)
 exprCheck env (Abstraction _ e) (TypeFun [] retTy) =
-    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
 
 -- Check for length match of params and their types(ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION)
 exprCheck env (Abstraction [] e) (TypeFun _ retTy) =
-    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
 
 -- 1. Check param types
 exprCheck env (Abstraction ((AParamDecl paramIdent paramGotTy) : params) e) (TypeFun (paramExpectedTy : paramExpectedTys) retTy) =
@@ -150,7 +155,7 @@ exprCheck env (Application e1 e2list) expectedRetTy =
         InferOk (TypeFun paramsTy actualRetTy) ->
             if (actualRetTy == expectedRetTy)
             then CheckOk
-            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e1 expectedRetTy actualRetTy)
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e1 expectedRetTy actualRetTy)
         InferOk actualTy ->
             CheckErr (ERROR_NOT_A_FUNCTION e1)
         InferErr err ->
@@ -167,7 +172,7 @@ exprCheck env (TypeAsc e ty) t =
 
 -- ====== T-Let ======
 exprCheck env (Let bindings e) t =
-    let patternToExpr = [(pattern, expr) | APatternBinding pattern expr <- bindings]
+    let patternToExpr = [(ptrn, expr) | APatternBinding ptrn expr <- bindings]
         newEnv = foldl step env patternToExpr
     in
         exprCheck newEnv e t
@@ -187,10 +192,10 @@ exprCheck env (Tuple []) (TypeTuple []) =
     CheckOk
 
 exprCheck env (Tuple _) (TypeTuple []) =
-    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
 
 exprCheck env (Tuple []) (TypeTuple _) =
-    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
 
 exprCheck env (Tuple (e : es)) (TypeTuple (ty : tys)) =
     exprCheck env e ty
@@ -202,7 +207,7 @@ exprCheck env (DotTuple expr idx) ty =
         InferOk actualTy ->
             if (ty == actualTy)
             then CheckOk
-            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED (DotTuple expr idx) ty actualTy)
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (DotTuple expr idx) ty actualTy)
         InferErr err ->
             CheckErr err
 
@@ -211,10 +216,10 @@ exprCheck env (Record []) (TypeRecord []) =
     CheckOk
 
 exprCheck env (Record _) (TypeRecord []) =
-    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
 
 exprCheck env (Record []) (TypeRecord _) =
-    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+    CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
 
 exprCheck env record_e@(Record (ABinding ident e : es)) (TypeRecord (ARecordFieldType l ty : flds)) 
     | ident /= l = CheckErr (ERROR_UNEXPECTED_FIELD_ACCESS record_e ident)   -- порядок/имена не совпали
@@ -229,184 +234,126 @@ exprCheck env (DotRecord expr ident) ty =
         InferOk actualTy ->
             if ty == actualTy
             then CheckOk
-            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED (DotRecord expr ident) ty actualTy)
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (DotRecord expr ident) ty actualTy)
         InferErr err ->
             CheckErr err
 
 
 exprCheck _ e t = CheckErr (C_ERROR_EXPR_NOT_IMPLEMENTED_YET e t)
 
-data InferResult = InferOk Type | InferErr CErrType
-  deriving (Show, Eq)
+-- Результат вывода типа
+type InferResult = Either CErrType
 
-indexInteger :: [a] -> Integer -> Maybe a
-indexInteger xs n
-    | n < 0                         = Nothing
-    | n >= fromIntegral (length xs)  = Nothing
-    | otherwise                     = Just (xs !! fromIntegral n)
+pattern InferOk :: a -> InferResult a
+pattern InferOk x = Right x
 
--- (-) PatternCastAs Pattern Type
--- (-) PatternAsc Pattern Type
--- (-) PatternVariant StellaIdent PatternData
--- (-) PatternInl Pattern
--- (-) PatternInr Pattern
--- (-) PatternTuple [Pattern]
--- (-) PatternRecord [LabelledPattern]
--- (-) PatternList [Pattern]
--- (-) PatternCons Pattern Pattern
--- (-) PatternFalse
--- (-) PatternTrue
--- (-) PatternUnit
--- (-) PatternInt Integer
--- (-) PatternSucc Pattern
--- (+) PatternVar StellaIdent
-updateEnvByBind :: Env -> PatternBinding -> Either CErrType Env
-updateEnvByBind env (APatternBinding (PatternVar ident) e) =
-    case exprInfer env e of
-        InferOk ty -> 
-            Ok (env ++ [(ident, ty)])
-        InferErr err ->
-            Bad err
+pattern InferErr :: CErrType -> InferResult a
+pattern InferErr e = Left e
 
-updateEnvByBind env (APatternBinding _ e) = Ok env
+exprInfer :: Env -> Expr -> InferResult Type
 
-updateEnvByBindings :: Env -> [PatternBinding] -> Either CErrType Env
-updateEnvByBindings env [] = Ok env
-updateEnvByBindings env (x : xs) =
-    case updateEnvByBind env x of
-        Ok newEnv -> 
-            updateEnvByBindings newEnv xs
-        Bad err ->
-            Bad err
-
-declInfer :: Env -> Decl -> Err (StellaIdent, Type)
--- T-Abs
-declInfer env (DeclFun _ name params _ _ _ body) =
-    let paramEnv       = [(ident, t) | AParamDecl ident t <- params]
-        envWithParams  = paramEnv ++ env
-    in case exprInfer envWithParams body of
-        InferOk tfunc -> Ok (name, TypeFun [t | AParamDecl _ t <- params] tfunc)
-        InferErr err -> Bad $ show err
-
-declInfer _ (DeclFunGeneric _ _ _ _ _ _ _ _) =
-    Bad "DeclFunGeneric not supported"
-declInfer _ (DeclTypeAlias _ _) =
-    Bad "DeclTypeAlias not supported"
-declInfer _ (DeclExceptionType _) =
-    Bad "DeclExceptionType not supported"
-declInfer _ (DeclExceptionVariant _ _) =
-    Bad "DeclExceptionVariant not supported"
-
-exprInfer :: Env -> Expr -> InferResult
-
--- T-Abs
--- 
--- 1. Update env with params
--- 2. Infer return type
--- 3. Return [param types] -> return type
-exprInfer env (Abstraction params e) =
-    let paramEnv       = [(ident, t) | AParamDecl ident t <- params]
-        envWithParams  = paramEnv ++ env
-    in case exprInfer envWithParams e of
-        InferOk ty -> InferOk (TypeFun [t | AParamDecl _ t <- params] ty)
-        InferErr err -> InferErr err
-
--- T-True
+-- ====== T-True ======
 exprInfer _ ConstTrue  = InferOk TypeBool
--- T-False
+
+-- ====== T-False ======
 exprInfer _ ConstFalse = InferOk TypeBool
--- T-If
-exprInfer env (If e1 e2 e3) =
-    let
-        t1 = exprInfer env e1
-        t2 = exprInfer env e2
-        t3 = exprInfer env e3
-    in case t1 of
-        InferOk TypeBool ->
-            case (t2, t3) of 
-                (InferOk ty2, InferOk ty3) ->
-                    if ty2 == ty3
-                    then InferOk ty2
-                    else InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e3 ty2 ty3)
-                (InferErr err2, _) ->
-                    InferErr err2
-                (_, InferErr err3) ->
-                    InferErr err3
-        InferOk ty ->
-            InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e1 TypeBool ty)
 
-        InferErr err -> InferErr err
+-- ====== T-If ======
+exprInfer env (If e1 e2 e3) = do
+    t1 <- exprInfer env e1
+    case t1 of
+        TypeBool -> do
+            ty2 <- exprInfer env e2
+            ty3 <- exprInfer env e3
+            if ty2 == ty3
+                then return ty2
+                else InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e3 ty2 ty3)
+        ty -> InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e1 TypeBool ty)
 
--- T-Zero
+-- ====== T-Zero ======
 exprInfer _ (ConstInt 0) = InferOk TypeNat
--- T-Succ
-exprInfer env (Succ e) = do
-    case exprInfer env e of
-        InferOk TypeNat -> InferOk TypeNat
-        InferOk ty -> InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e TypeNat ty)
 
-        InferErr err -> InferErr err
--- T-Pred
-exprInfer env (Pred e) = do
+-- ====== T-Succ ======
+exprInfer env (Succ e) =
     case exprInfer env e of
-        InferOk TypeNat -> InferOk TypeNat
-        InferOk ty -> InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e TypeNat ty)
+        InferOk TypeNat -> 
+            InferOk TypeNat
+        InferOk ty -> 
+            InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e TypeNat ty)
+        InferErr err -> 
+            InferErr err
 
-        InferErr err -> InferErr err
--- T-IsZero
-exprInfer env (IsZero e) = do
+-- ====== T-Pred ======
+exprInfer env (Pred e) =
     case exprInfer env e of
-        InferOk TypeNat -> InferOk TypeBool
-        InferOk ty -> InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e TypeNat ty)
-
-        InferErr err -> InferErr err
--- T-NatRec
-exprInfer env (NatRec e1 e2 e3) =
-    let
-        t1 = exprInfer env e1
-        t2 = exprInfer env e2
-        t3 = exprInfer env e3
-    in case t1 of
         InferOk TypeNat ->
-            case t2 of 
-                InferOk ty2 ->
-                    case t3 of
-                        InferOk (TypeFun [TypeNat] (TypeFun [ty21] ty22)) ->
-                            if (ty2 == ty21 && ty2 == ty22) --TODO: Migrate to use checkExpr
-                            then InferOk ty2
-                            else InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e3 (TypeFun [TypeNat] (TypeFun [ty2] ty2)) (TypeFun [TypeNat] (TypeFun [ty21] ty22)))
-                        InferErr err -> InferErr err
-                InferErr err -> InferErr err
+            InferOk TypeNat
         InferOk ty ->
-            InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_DETAILED e1 TypeNat ty)
+            InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e TypeNat ty)
+        InferErr err ->
+            InferErr err
 
-        InferErr err -> InferErr err
+-- ====== T-IsZero ======
+exprInfer env (IsZero e) =
+    case exprInfer env e of
+        InferOk TypeNat ->
+            InferOk TypeBool
+        InferOk ty ->
+            InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e TypeNat ty)
+        InferErr err ->
+            InferErr err
 
--- T-Var
+-- ====== T-NatRec ======
+exprInfer env (NatRec e1 e2 e3) =
+    case (exprCheck env e1 TypeNat) of
+        CheckErr err -> 
+            InferErr err
+        CheckOk ->
+            case (exprInfer env e2) of
+                InferErr err ->
+                    InferErr err
+                InferOk ty ->
+                    case (exprCheck env e3 (TypeFun [TypeNat] (TypeFun [ty] ty))) of
+                        CheckErr err ->
+                            InferErr err
+                        CheckOk ->
+                            InferOk ty
+
+-- ====== T-Var ======
 exprInfer env (Var ident) =
     case lookup ident env of
         Just t  -> InferOk t
         Nothing -> InferErr (ERROR_UNDEFINED_VARIABLE ident)
 
--- T-App
-exprInfer env (Application e1 e2list) =
-    case exprInfer env e1 of
-        InferOk (TypeFun tys retTy) ->
-            case (exprListCheck env e2list tys) of
-                CheckOk -> InferOk retTy
-                CheckErr err -> InferErr err
-        InferOk _ -> InferErr (ERROR_NOT_A_FUNCTION e1)
-
+-- ====== T-Abs ======
+exprInfer env (Abstraction params e) =
+    case exprInfer (updateEnvByParams env params) e of
+        InferOk ty -> InferOk (TypeFun [t | AParamDecl _ t <- params] ty)
         InferErr err -> InferErr err
 
--- T-Unit
+-- ====== T-App ======
+exprInfer env (Application e1 e2list) = do
+    case exprInfer env e1 of
+        InferOk (TypeFun paramTys retTy) ->
+            if length e2list /= length paramTys
+                then InferErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT) -- Not matched args length with type
+                else case foldl (checkArg env) CheckOk (zip e2list paramTys) of
+                    CheckOk ->
+                        InferOk retTy
+                    CheckErr err ->
+                        InferErr err
+        InferOk _ ->
+            InferErr (ERROR_NOT_A_FUNCTION e1)
+        InferErr err ->
+            InferErr err
+    where
+        checkArg :: Env -> CheckResult -> (Expr, Type) -> CheckResult
+        checkArg env acc (e, ty) = acc >>> exprCheck env e ty
+
+-- ====== T-Unit ======
 exprInfer _ ConstUnit  = InferOk TypeUnit
 
--- T-Seq
--- 
--- t1 ; t2 => T
--- 1. Check t1 <= Unit
--- 2. Infer t2 => T 
+-- ====== T-Seq ======
 exprInfer env (Sequence e1 e2) =
     case exprCheck env e1 TypeUnit of
         CheckOk ->
@@ -414,11 +361,7 @@ exprInfer env (Sequence e1 e2) =
         CheckErr err ->
             InferErr err
 
--- T-Ascribe
--- 
--- t as T => T
--- 1. Check t <= T
--- 2. Return T
+-- ====== T-Ascribe ======
 exprInfer env (TypeAsc e ty) =
     case exprCheck env e ty of
         CheckOk ->
@@ -426,12 +369,7 @@ exprInfer env (TypeAsc e ty) =
         CheckErr err ->
             InferErr err
 
--- T-Let
--- 
--- let x = e1 in e2 => T2
--- 1. Infer e1 => T1
--- 2. Add x : T1 to env
--- 3. Infer e2 => T2 with new env
+-- ====== T-Let ======
 exprInfer env (Let bindings e) =
     case updateEnvByBindings env bindings of
         Ok env ->
@@ -439,27 +377,18 @@ exprInfer env (Let bindings e) =
         Bad err ->
             InferErr err
 
--- T-Tuple
--- 
--- {t_1,..,t_n} : {T_1,...,T_n}
--- 1. Infer exprs types
--- 2. Return TypeTuple instance
+-- ====== T-Tuple ======
 exprInfer env (Tuple exprs) =
     foldl step (InferOk (TypeTuple [])) exprs
   where
-    step :: InferResult -> Expr -> InferResult
+    step :: InferResult Type -> Expr -> InferResult Type
     step (InferErr err) _ = InferErr err
     step (InferOk (TypeTuple acc)) e =
         case exprInfer env e of
             InferOk ty   -> InferOk (TypeTuple (acc ++ [ty]))
             InferErr err -> InferErr err
 
--- T-Proj
--- 
--- t.j => T_j
--- 1. Infer expr type
--- 2. Check if it Tuple type
--- 3. Take idx'th type
+-- ====== T-Proj ======
 exprInfer env (DotTuple expr idx) =
     case exprInfer env expr of
         InferOk (TypeTuple tys) ->
@@ -471,15 +400,11 @@ exprInfer env (DotTuple expr idx) =
         InferErr err ->
             InferErr err
 
--- T-Record
--- 
--- {l_1 = t_1,..,l_n = t_n} : {l_1 : T_1,...,l_n : T_n}
--- 1. Infer exprs types
--- 2. Return TypeRecord instance
+-- ====== T-Record ======
 exprInfer env (Record bindings) =
         foldl step (InferOk (TypeRecord [])) bindings
     where
-        step :: InferResult -> Binding -> InferResult
+        step :: InferResult Type -> Binding -> InferResult Type
         step (InferOk (TypeRecord acc)) (ABinding ident e) =
             case exprInfer env e of
                 InferOk ty ->
@@ -487,11 +412,7 @@ exprInfer env (Record bindings) =
                 InferErr err ->
                     InferErr err
 
--- T-RecordProj
--- 
--- t.l_j => T_j
--- 1. Infer t type
--- 2. Get l_j from inferred type
+-- ====== T-RecordProj ======
 exprInfer env (DotRecord expr ident) =
     case exprInfer env expr of
         InferOk (TypeRecord fields) ->
@@ -502,7 +423,47 @@ exprInfer env (DotRecord expr ident) =
         InferOk otherTy ->
             InferErr (ERROR_NOT_A_RECORD expr)
         InferErr err ->
-            InferErr err 
+            InferErr err
 
 -- Other
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
+
+indexInteger :: [a] -> Integer -> Maybe a
+indexInteger xs n
+    | n < 0                         = Nothing
+    | n >= fromIntegral (length xs)  = Nothing
+    | otherwise                     = Just (xs !! fromIntegral n)
+
+-- -- (-) PatternCastAs Pattern Type
+-- -- (-) PatternAsc Pattern Type
+-- -- (-) PatternVariant StellaIdent PatternData
+-- -- (-) PatternInl Pattern
+-- -- (-) PatternInr Pattern
+-- -- (-) PatternTuple [Pattern]
+-- -- (-) PatternRecord [LabelledPattern]
+-- -- (-) PatternList [Pattern]
+-- -- (-) PatternCons Pattern Pattern
+-- -- (-) PatternFalse
+-- -- (-) PatternTrue
+-- -- (-) PatternUnit
+-- -- (-) PatternInt Integer
+-- -- (-) PatternSucc Pattern
+-- -- (+) PatternVar StellaIdent
+updateEnvByBind :: Env -> PatternBinding -> Either CErrType Env
+updateEnvByBind env (APatternBinding (PatternVar ident) e) =
+    case exprInfer env e of
+        InferOk ty ->
+            Ok (env ++ [(ident, ty)])
+        InferErr err ->
+            Bad err
+
+-- updateEnvByBind env (APatternBinding _ e) = Ok env
+
+updateEnvByBindings :: Env -> [PatternBinding] -> Either CErrType Env
+updateEnvByBindings env [] = Ok env
+updateEnvByBindings env (x : xs) =
+    case updateEnvByBind env x of
+        Ok newEnv -> 
+            updateEnvByBindings newEnv xs
+        Bad err ->
+            Bad err

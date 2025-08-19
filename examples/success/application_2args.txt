@@ -4,7 +4,7 @@ extend with #sequencing;
 
 fn Bool::not(b : Bool) -> Bool {
     return
-        if b then false else true; if b then false else true
+        if b then false else true
 }
 
 fn twice(f : fn(Bool) -> Bool) -> (fn(Bool) -> Bool) {
