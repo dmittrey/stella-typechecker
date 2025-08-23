@@ -19,7 +19,12 @@ typeCheck (AProgram _ _ decls) =
     in
         case (foldl step (CheckOk, []) decls) of
             ((CheckErr err), env) -> putStrLn $ "Type error: " ++ show err
-            (CheckOk, env) -> putStrLn "Type checking passed!"
+            (CheckOk, env) -> 
+                case lookup (StellaIdent "main") env of
+                    Just ident ->
+                        putStrLn "Type checking passed!"
+                    Nothing ->
+                        putStrLn $ "Type error: " ++ show ERROR_MISSING_MAIN
     where
         step :: (CheckResult, Env) -> Decl -> (CheckResult, Env)
         step (CheckOk, env) decl =
