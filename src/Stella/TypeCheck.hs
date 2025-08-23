@@ -11,9 +11,6 @@ import Prelude
 -- TODO
 -- Порефакторить систему сборки
 
--- 5. Сделать реализацию BindingPattern
--- 6. для расширения #sum-types: TypeSum, Inl, Inr, Match, AMatchCase, PatternInl, PatternInr, PatternVar
--- 7. Пройтись еще раз по охвату ошибок
 -- 8. Организовать тестовое покрытие(переназвать файлы, пройтись по кейсам)
 
 data MissingMatchCase
@@ -24,10 +21,12 @@ data MissingMatchCase
 -- Типы ошибок
 data CErrType
     = C_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr Type
-    | C_ERROR_EXPR_NOT_IMPLEMENTED_YET_I Pattern Pattern Expr Type
+    | C_ERROR_EXPR_NOT_IMPLEMENTED_YET_I
     | I_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr
+    | I_ERROR_EXPR_NOT_IMPLEMENTED_YET_I
     | C_ERROR_DECL_NOT_IMPLEMENTED_YET Decl
     | ERROR_Unknown_ident_for_binding
+
     | ERROR_MISSING_MAIN
     | ERROR_UNDEFINED_VARIABLE StellaIdent
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
@@ -35,15 +34,27 @@ data CErrType
     | ERROR_NOT_A_FUNCTION Expr
     | ERROR_NOT_A_TUPLE Expr
     | ERROR_NOT_A_RECORD Expr
-    | ERROR_UNEXPECTED_TUPLE_LENGTH Expr Integer
-    | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
-    | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
-    | ERROR_UNEXPECTED_TYPE_FOR_PARAMETER StellaIdent Type Type -- Ident Expected Got
     | ERROR_UNEXPECTED_LAMBDA Expr Type
-    | ERROR_AMBIGUOUS_SUM_TYPE Expr
+    | ERROR_UNEXPECTED_TYPE_FOR_PARAMETER StellaIdent Type Type -- Ident Expected Got
+    | ERROR_UNEXPECTED_TUPLE Expr Type
+    | ERROR_UNEXPECTED_RECORD Expr Type
+    -- ERROR_UNEXPECTED_VARIANT
+    -- ERROR_UNEXPECTED_LIST
     | ERROR_UNEXPECTED_INJECTION Expr
-    | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS Expr MissingMatchCase
-    | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Expr [MatchCase]
+    -- ERROR_UNEXPECTED_RECORD_FIELDS
+    | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
+    -- ERROR_UNEXPECTED_VARIANT_LABEL
+    | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
+    -- ERROR_UNEXPECTED_TUPLE_LENGTH Expr Integer
+    | ERROR_AMBIGUOUS_SUM_TYPE Expr
+    -- ERROR_AMBIGUOUS_VARIANT_TYPE
+    -- ERROR_AMBIGUOUS_LIST
+    | ERROR_ILLEGAL_EMPTY_MATCHING
+    | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase] MissingMatchCase
+    | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Pattern Type
+    -- ERROR_DUPLICATE_RECORD_FIELDS
+    -- ERROR_DUPLICATE_RECORD_TYPE_FIELDS
+    -- ERROR_DUPLICATE_VARIANT_TYPE_FIELDS
   deriving (Eq, Ord, Show, Read)
 
 -- Окружение: имя переменной → её тип
@@ -216,6 +227,9 @@ exprCheck env (Tuple (e : es)) (TypeTuple (ty : tys)) =
     exprCheck env e ty
     >>> exprCheck env (Tuple es) (TypeTuple tys)
 
+exprCheck env expression@(Tuple _) ty =
+    CheckErr (ERROR_UNEXPECTED_TUPLE expression ty)
+
 -- ====== T-Proj ======
 exprCheck env (DotTuple expr idx) ty =
     case exprInfer env (DotTuple expr idx) of
@@ -242,6 +256,9 @@ exprCheck env record_e@(Record (ABinding ident e : es)) (TypeRecord (ARecordFiel
         exprCheck env e ty
         >>> exprCheck env (Record es) (TypeRecord flds)
 
+exprCheck env expression@(Record _) ty =
+    CheckErr (ERROR_UNEXPECTED_RECORD expression ty)
+
 -- ====== T-RecordProj ======
 -- t.l_j : T_j
 exprCheck env (DotRecord expr ident) ty =
@@ -264,23 +281,86 @@ exprCheck env (Inr expr) (TypeSum t1 t2) = exprCheck env expr t2
 exprCheck env (Inr expr) _ = CheckErr (ERROR_UNEXPECTED_INJECTION expr)
 
 -- ====== T-Case ======
--- TODO check match in match
-exprCheck env (Match expr cases@[(AMatchCase (PatternInl p1) v1), (AMatchCase (PatternInr p2) v2)]) ty =
-    case exprInfer env expr of
-        InferOk (TypeSum t1 t2) -> 
-            exprCheck (env ++ [(fetchIdent p1, t1)]) v1 ty
-            >>> exprCheck (env ++ [(fetchIdent p2, t2)]) v2 ty
-        InferOk _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE expr cases)
-        InferErr err -> CheckErr err
-exprCheck env (Match expr [(AMatchCase (PatternInl p1) v1), (AMatchCase _ v2)]) ty = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS expr MissingInr)
-exprCheck env (Match expr [(AMatchCase _ v1), (AMatchCase (PatternInr p2) v2)]) ty = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS expr MissingInl)
-
--- TODO сделать реализацию для variant
--- Подумать на тему как разбирать паттерны, надо де откуда-то для patterns stella-ident получать, скорее всего тут и появляется match логика
--- exprCheck env (Match expr [p1, p2]) ty = CheckOk
--- exprCheck env (Match expr matchCases) ty = CheckOk
+exprCheck env (Match t1 cases) tyC =
+    case exprInfer env t1 of
+        InferErr err ->
+            CheckErr err
+        InferOk ty1 ->
+            checkMatchCases env cases ty1 tyC
 
 exprCheck _ e t = CheckErr (C_ERROR_EXPR_NOT_IMPLEMENTED_YET e t)
+
+checkMatchCases :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+--                Env |  Match Cases  | t1 type | C type
+checkMatchCases env [] _ _ = CheckErr ERROR_ILLEGAL_EMPTY_MATCHING
+checkMatchCases env [(AMatchCase (PatternInl pl) el), (AMatchCase (PatternInr pr) er)] (TypeSum t1 t2) ty =
+    case bindPattern env pl t1 of
+        InferErr err ->
+            InferErr err
+        InferOk envl ->
+            exprCheck envl el ty >>>
+            (case bindPattern env pr t2 of
+                InferErr err ->
+                    InferErr err
+                InferOk envr ->
+                    exprCheck envr er ty)
+checkMatchCases _ cases@[(AMatchCase (PatternInl _) _), (AMatchCase _ _)] (TypeSum _ _) ty = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases MissingInr)
+checkMatchCases _ cases@[(AMatchCase _ _), (AMatchCase (PatternInr _) _)] (TypeSum _ _) ty = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases MissingInl)
+checkMatchCases _ _ _ _ = CheckErr (C_ERROR_EXPR_NOT_IMPLEMENTED_YET_I)
+
+inferMatchCases :: Env -> [MatchCase] -> Type -> InferResult Type
+--                Env |  Match Cases  | t1 type 
+inferMatchCases env [] _ = InferErr ERROR_ILLEGAL_EMPTY_MATCHING
+inferMatchCases env [(AMatchCase (PatternInl pl) e2), (AMatchCase (PatternInr pr) e3)] (TypeSum ty2 ty3) =
+    case bindPattern env pl ty2 of
+        InferErr err ->
+            InferErr err
+        InferOk env2 ->
+            case exprInfer env2 e2 of
+                InferErr err ->
+                    InferErr err
+                InferOk tyC ->
+                    case bindPattern env pr ty3 of
+                        InferErr err ->
+                            InferErr err
+                        InferOk env3 ->
+                            case exprCheck env3 e3 tyC of
+                                CheckErr err ->
+                                    InferErr err
+                                CheckOk ->
+                                    InferOk tyC
+inferMatchCases _ cases@[(AMatchCase (PatternInl _) _), (AMatchCase _ _)] (TypeSum _ _) = InferErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases MissingInr)
+inferMatchCases _ cases@[(AMatchCase _ _), (AMatchCase (PatternInr _) _)] (TypeSum _ _) = InferErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases MissingInl)
+inferMatchCases _ _ _ = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET_I)
+
+-- -- (-) PatternCastAs Pattern Type
+-- -- (-) PatternAsc Pattern Type
+-- -- (-) PatternVariant StellaIdent PatternData
+-- -- (+) PatternInl Pattern
+-- -- (+) PatternInr Pattern
+-- -- (-) PatternTuple [Pattern]
+-- -- (-) PatternRecord [LabelledPattern]
+-- -- (-) PatternList [Pattern]
+-- -- (-) PatternCons Pattern Pattern
+-- -- (-) PatternFalse
+-- -- (-) PatternTrue
+-- -- (-) PatternUnit
+-- -- (-) PatternInt Integer
+-- -- (-) PatternSucc Pattern
+-- -- (+) PatternVar StellaIdent
+bindPattern :: Env -> Pattern -> Type -> InferResult Env
+bindPattern env (PatternVar ident) t =
+    InferOk (env ++ [(ident, t)])
+bindPattern env (PatternInl p) (TypeSum t1 t2) =
+    bindPattern env p t1
+bindPattern env p@(PatternInl pl) t =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE p t)
+bindPattern env (PatternInr p) (TypeSum t1 t2) =
+    bindPattern env p t2
+bindPattern env p@(PatternInr pr) t =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE p t)
+bindPattern env _ _ = 
+    InferErr I_ERROR_EXPR_NOT_IMPLEMENTED_YET_I
 
 -- Результат вывода типа
 type InferResult = Either CErrType
@@ -473,16 +553,12 @@ exprInfer env (Inl expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 exprInfer env (Inr expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 
 -- ====== T-Case ======
--- exprInfer env (Match expr matchCases) =
---         let newEnv = foldl step env matchCases
---     in
---         exprInfer newEnv expr
---     where
---         step :: Env -> MatchCase -> Env
---         step e mc =
---             case updateEnvByMatchCase e mc of
---                 Ok ne -> ne
---                 Bad _ -> e
+exprInfer env (Match t1 cases) =
+    case exprInfer env t1 of
+        InferErr err ->
+            InferErr err
+        InferOk ty1 ->
+            inferMatchCases env cases ty1
 
 -- Other
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
@@ -493,63 +569,15 @@ indexInteger xs n
     | n >= fromIntegral (length xs)  = Nothing
     | otherwise                     = Just (xs !! fromIntegral n)
 
--- -- (-) PatternCastAs Pattern Type
--- -- (-) PatternAsc Pattern Type
--- -- (-) PatternVariant StellaIdent PatternData
--- -- (+) PatternInl Pattern
--- -- (+) PatternInr Pattern
--- -- (-) PatternTuple [Pattern]
--- -- (-) PatternRecord [LabelledPattern]
--- -- (-) PatternList [Pattern]
--- -- (-) PatternCons Pattern Pattern
--- -- (-) PatternFalse
--- -- (-) PatternTrue
--- -- (-) PatternUnit
--- -- (-) PatternInt Integer
--- -- (-) PatternSucc Pattern
--- -- (+) PatternVar StellaIdent
-fetchIdent :: Pattern -> Maybe StellaIdent
-fetchIdent (PatternVar ident) =
-    Just ident
--- fetchIdent (PatternInl p) =
---     fetchIdent p
--- fetchIdent (PatternInr p) =
---     fetchIdent p
-fetchIdent _ =
-    Nothing
-
--- TODO дописать заполнение env
--- updateEnvByMatchCase :: Env -> MatchCase -> Either CErrType Env
--- updateEnvByMatchCase env (AMatchCase p e) =
---     case exprInfer env e of
---         InferOk ty ->
---             case fetchIdent p of
---                 Nothing ->
---                     Bad ERROR_Unknown_ident_for_binding
---                 Just ident ->
---                     Ok (env ++ [(ident, ty)])
---         InferErr err ->
---             Bad err
-
-updateEnvByBind :: Env -> PatternBinding -> Either CErrType Env
-updateEnvByBind env (APatternBinding p e) =
-    case exprInfer env e of
-        InferOk ty ->
-            case fetchIdent p of
-                Just ident ->
-                    Ok (env ++ [(ident, ty)])
-                Nothing ->
-                    Bad (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
-        InferErr err ->
-            Bad err
-
-updateEnvByBind env (APatternBinding _ e) = Ok env
-
-updateEnvByBindings :: Env -> [PatternBinding] -> Either CErrType Env
+updateEnvByBindings :: Env -> [PatternBinding] -> InferResult Env
 updateEnvByBindings env [] = Ok env
-updateEnvByBindings env (x : xs) =
-    case updateEnvByBind env x of
-        Ok newEnv -> 
-            updateEnvByBindings newEnv xs
-        Bad err ->
-            Bad err
+updateEnvByBindings env bindings =
+        foldl step (InferOk env) bindings
+    where
+        step :: InferResult Env -> PatternBinding -> InferResult Env
+        step (InferOk accEnv) (APatternBinding p e) =
+            case exprInfer accEnv e of
+                InferErr err ->
+                    InferErr err
+                InferOk ty ->
+                    bindPattern accEnv p ty
