@@ -1,5 +1,5 @@
 language core;
 fn main (n : Nat) -> Nat
 {
-  return succ (succ (0))
+  return succ (succ (5))
 }

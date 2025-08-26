@@ -1,0 +1,5 @@
+language core;
+
+fn main(_ : Bool) -> Bool {
+  return fn(b : Bool) { return b }
+}

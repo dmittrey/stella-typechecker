@@ -1,0 +1,11 @@
+language core;
+
+fn applyThreeTimes(f : fn(Bool) -> Bool) -> fn(Bool) -> Bool {
+  return fn(b : Bool) { return f(f(f(b))) }
+}
+
+fn main(_ : Bool) -> fn(Bool) -> Bool {
+  return fn(flag : Bool) {
+    return applyThreeTimes(fn(x : Nat) { return true })(flag)
+  }
+}

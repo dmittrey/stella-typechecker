@@ -1,0 +1,5 @@
+language core;
+
+fn main(_ : Unit) -> Unit {
+  return fn(u : Unit) { return u }
+}

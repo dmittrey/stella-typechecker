@@ -1,0 +1,9 @@
+language core;
+
+fn is_zero(n : Nat) -> Bool {
+  return Nat::iszero(n)
+}
+
+fn main(n : Nat) -> Bool {
+  return is_zero(n)
+}

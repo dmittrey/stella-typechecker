@@ -1,0 +1,9 @@
+language core;
+
+fn previous(n : Nat) -> Nat {
+  return Nat::pred(n)
+}
+
+fn main(n : Nat) -> Nat {
+  return previous(n)
+}

@@ -1,0 +1,9 @@
+language core;
+
+fn boolTwice(f : Bool) -> Bool {
+  return f
+}
+
+fn main(n : Nat) -> Bool {
+    return boolTwice(n)
+}

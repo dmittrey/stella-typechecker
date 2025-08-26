@@ -1,0 +1,5 @@
+language core;
+
+fn main(b : Bool) -> Bool {
+  return if c then true else false
+}

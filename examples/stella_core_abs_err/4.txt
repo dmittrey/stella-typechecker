@@ -1,0 +1,5 @@
+language core;
+
+fn main(_ : Nat) -> Bool {
+  return fn(x : Nat) { return succ(x) }
+}
