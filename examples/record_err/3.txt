@@ -1,0 +1,7 @@
+language core;
+extend with #records,#natural-literals,#let-bindings,#nullary-functions,#type-ascriptions;
+
+fn main(_ : Nat) -> Nat {
+  return let r = {x = 1, y = 2}  // Ошибка: запись проверяется с типом Nat
+  in r as Nat
+}

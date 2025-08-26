@@ -1,0 +1,10 @@
+language core;
+extend with #records,#nullary-functions,#natural-literals;
+
+fn make() -> {x : Nat, y : Nat, z : Nat} {
+  return {x = 1}  // Ошибка: отсутствуют y и z
+}
+
+fn main(a : Nat) -> Nat {
+  return a
+}

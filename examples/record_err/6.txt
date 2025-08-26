@@ -1,0 +1,10 @@
+language core;
+extend with #records,#nullary-functions,#natural-literals;
+
+fn make() -> {x : Nat} {
+  return {x = 1, x = 2}  // Ошибка: повторяющееся имя поля x
+}
+
+fn main(a : Nat) -> Nat {
+  return a
+}
