@@ -5,6 +5,9 @@ module Stella.TypeCheck where
 import Stella.Abs
 import Stella.ErrM
 
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+
 import Data.Maybe
 import Data.List
 import Prelude
@@ -41,16 +44,17 @@ data CErrType
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
     | ERROR_NOT_A_FUNCTION Expr
     | ERROR_NOT_A_TUPLE Expr
-    -- | ERROR_NOT_A_RECORD Expr
+    | ERROR_NOT_A_RECORD Expr
     | ERROR_UNEXPECTED_LAMBDA Expr Type
     | ERROR_UNEXPECTED_TYPE_FOR_PARAMETER StellaIdent Type Type -- Ident Expected Got
     | ERROR_UNEXPECTED_TUPLE Expr Type
-    -- | ERROR_UNEXPECTED_RECORD Expr Type
+    | ERROR_UNEXPECTED_RECORD Expr Type
     -- | ERROR_UNEXPECTED_VARIANT Expr
     -- ERROR_UNEXPECTED_LIST
     -- | ERROR_UNEXPECTED_INJECTION Expr
-    -- ERROR_UNEXPECTED_RECORD_FIELDS
-    -- | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
+    | ERROR_MISSING_RECORD_FIELDS
+    | ERROR_UNEXPECTED_RECORD_FIELDS
+    | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
     -- | ERROR_UNEXPECTED_VARIANT_LABEL
     | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
     | ERROR_UNEXPECTED_TUPLE_LENGTH
@@ -60,8 +64,8 @@ data CErrType
     -- | ERROR_ILLEGAL_EMPTY_MATCHING
     -- | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase] MissingMatchCase
     -- | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Pattern Type
-    -- ERROR_DUPLICATE_RECORD_FIELDS
-    -- ERROR_DUPLICATE_RECORD_TYPE_FIELDS
+    | ERROR_DUPLICATE_RECORD_FIELDS
+    | ERROR_DUPLICATE_RECORD_TYPE_FIELDS
     -- ERROR_DUPLICATE_VARIANT_TYPE_FIELDS
   deriving (Eq, Ord, Show, Read)
 
@@ -262,35 +266,50 @@ exprCheck env expression@(DotTuple expr idx) ty =
         InferOk _                                   -> CheckErr (ERROR_NOT_A_TUPLE expr)
         InferErr err                                -> CheckErr err
 
--- -- ====== T-Record ======
--- exprCheck env (Record []) (TypeRecord []) =
---     CheckOk
+-- ====== T-Record ======
+exprCheck env (Record []) (TypeRecord []) =
+    CheckOk
 
--- exprCheck env (Record _) (TypeRecord []) =
---     CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
+exprCheck env (Record bindings) (TypeRecord fields) =
+    let origBindingsLen = length bindings
+        origFieldsLen   = length fields
+        bindingsMap     = Map.fromList [(name, val) | ABinding name val <- bindings]
+        fieldsMap       = Map.fromList [(name, ty)  | ARecordFieldType name ty <- fields]
+        bindingNames    = Map.keysSet bindingsMap
+        fieldNames      = Map.keysSet fieldsMap
 
--- exprCheck env (Record []) (TypeRecord _) =
---     CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_SILENT
+        checkFields :: [(StellaIdent, Type)] -> CheckResult
+        checkFields [] = CheckOk
+        checkFields ((name, ty) : rest) =
+            case Map.lookup name bindingsMap of
+                Just val -> exprCheck env val ty >>> checkFields rest
+                Nothing  -> CheckErr ERROR_MISSING_RECORD_FIELDS
+    in if Map.size fieldsMap /= origFieldsLen
+        then CheckErr ERROR_DUPLICATE_RECORD_TYPE_FIELDS
+       else if Map.size bindingsMap /= origBindingsLen
+        then CheckErr ERROR_DUPLICATE_RECORD_FIELDS
+       else if not (Set.isSubsetOf fieldNames bindingNames)
+        then CheckErr ERROR_MISSING_RECORD_FIELDS
+       else if not (Set.isSubsetOf bindingNames fieldNames)
+        then CheckErr ERROR_UNEXPECTED_RECORD_FIELDS
+       else checkFields (Map.toList fieldsMap)
 
--- exprCheck env record_e@(Record (ABinding ident e : es)) (TypeRecord (ARecordFieldType l ty : flds)) 
---     | ident /= l = CheckErr (ERROR_UNEXPECTED_FIELD_ACCESS record_e ident)   -- порядок/имена не совпали
---     | otherwise  =
---         exprCheck env e ty
---         >>> exprCheck env (Record es) (TypeRecord flds)
+exprCheck env expression@(Record _) ty =
+    CheckErr (ERROR_UNEXPECTED_RECORD expression ty)
 
--- exprCheck env expression@(Record _) ty =
---     CheckErr (ERROR_UNEXPECTED_RECORD expression ty)
-
--- -- ====== T-RecordProj ======
--- -- t.l_j : T_j
--- exprCheck env (DotRecord expr ident) ty =
---     case exprInfer env (DotRecord expr ident) of
---         InferOk actualTy ->
---             if ty == actualTy
---             then CheckOk
---             else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (DotRecord expr ident) ty actualTy)
---         InferErr err ->
---             CheckErr err
+-- ====== T-DotRecord ======
+exprCheck env (DotRecord expr ident) ty =
+    case exprInfer env expr of
+        InferOk (TypeRecord fields) ->
+            let identToType = [(i, ty)  | ARecordFieldType i ty <- fields]
+            in
+                case lookup ident identToType of
+                    Just actualTy
+                        | actualTy /= ty    -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION expr ty actualTy)
+                        | otherwise         -> CheckOk
+                    Nothing                 -> CheckErr (ERROR_UNEXPECTED_FIELD_ACCESS expr ident)
+        InferOk _                           -> CheckErr (ERROR_NOT_A_RECORD expr)
+        InferErr err                        -> CheckErr err
 
 -- -- ====== T-Inl ======
 -- exprCheck env (Inl expr) (TypeSum t1 t2) = exprCheck env expr t1
@@ -320,6 +339,14 @@ exprCheck env expression@(DotTuple expr idx) ty =
 -- exprCheck env expr@(Variant ident exprData) _ = CheckErr (ERROR_UNEXPECTED_VARIANT expr)
 
 -- ====== Other ======
+
+-- T-Add
+exprCheck env (Add e1 e2) TypeNat = 
+    exprCheck env e1 TypeNat
+    >>> exprCheck env e2 TypeNat
+
+-- T-Natural
+exprCheck _ (ConstInt n) TypeNat = CheckOk
 
 -- T-Equal
 exprCheck env (Equal e1 e2) t =
@@ -439,7 +466,7 @@ exprInfer env (If t1 t2 t3) =
         InferErr err ->
             InferErr err
 
--- -- ====== T-Zero ======
+-- ====== T-Zero ======
 exprInfer _ (ConstInt 0) = InferOk TypeNat
 
 -- -- ====== T-Succ ======
@@ -564,30 +591,28 @@ exprInfer env expression@(DotTuple expr idx) =
         InferOk _                                   -> InferErr (ERROR_NOT_A_TUPLE expr)
         InferErr err                                -> InferErr err
 
--- -- ====== T-Record ======
--- exprInfer env (Record bindings) =
---         foldl step (InferOk (TypeRecord [])) bindings
---     where
---         step :: InferResult Type -> Binding -> InferResult Type
---         step (InferOk (TypeRecord acc)) (ABinding ident e) =
---             case exprInfer env e of
---                 InferOk ty ->
---                     InferOk (TypeRecord (acc ++ [(ARecordFieldType ident ty)]))
---                 InferErr err ->
---                     InferErr err
+-- ====== T-Record ======
+exprInfer env (Record bindings) =
+        foldl step (InferOk (TypeRecord [])) bindings
+    where
+        step :: InferResult Type -> Binding -> InferResult Type
+        step (InferOk (TypeRecord acc)) (ABinding ident e) =
+            case exprInfer env e of
+                InferOk ty ->
+                    InferOk (TypeRecord (acc ++ [(ARecordFieldType ident ty)]))
+                InferErr err ->
+                    InferErr err
 
--- -- ====== T-RecordProj ======
--- exprInfer env (DotRecord expr ident) =
---     case exprInfer env expr of
---         InferOk (TypeRecord fields) ->
---             let identToType = [(ident, t) | ARecordFieldType ident t <- fields]
---             in case lookup ident identToType of
---                 Just ty  -> InferOk ty
---                 Nothing -> InferErr (ERROR_UNEXPECTED_FIELD_ACCESS expr ident)
---         InferOk otherTy ->
---             InferErr (ERROR_NOT_A_RECORD expr)
---         InferErr err ->
---             InferErr err
+-- ====== T-DotRecord ======
+exprInfer env (DotRecord expr ident) =
+    case exprInfer env expr of
+        InferOk (TypeRecord fields) ->
+            let identToType = [(ident, t) | ARecordFieldType ident t <- fields]
+            in case lookup ident identToType of
+                Just ty         -> InferOk ty
+                Nothing         -> InferErr (ERROR_UNEXPECTED_FIELD_ACCESS expr ident)
+        InferOk otherTy         -> InferErr (ERROR_NOT_A_RECORD expr)
+        InferErr err            -> InferErr err
 
 -- -- ====== T-Inl ======
 -- exprInfer env (Inl expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
@@ -603,7 +628,11 @@ exprInfer env expression@(DotTuple expr idx) =
 --         InferOk ty1 ->
 --             inferMatchCases env cases ty1
 
--- -- Other
+-- Other
+
+-- T-Natural
+exprInfer _ (ConstInt n) = InferOk TypeNat
+
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
 
 -- updateEnvByBindings :: Env -> [PatternBinding] -> InferResult Env
