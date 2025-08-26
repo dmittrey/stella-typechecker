@@ -14,8 +14,6 @@ import Prelude
 
 -- TODO
 
--- Record
--- TypeSum
 -- Lists
 -- Variant
 -- Fixed point
@@ -51,14 +49,14 @@ data CErrType
     | ERROR_UNEXPECTED_RECORD Expr Type
     -- | ERROR_UNEXPECTED_VARIANT Expr
     -- ERROR_UNEXPECTED_LIST
-    -- | ERROR_UNEXPECTED_INJECTION Expr
+    | ERROR_UNEXPECTED_INJECTION Expr
     | ERROR_MISSING_RECORD_FIELDS
     | ERROR_UNEXPECTED_RECORD_FIELDS
     | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
     -- | ERROR_UNEXPECTED_VARIANT_LABEL
     | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
     | ERROR_UNEXPECTED_TUPLE_LENGTH
-    -- | ERROR_AMBIGUOUS_SUM_TYPE Expr
+    | ERROR_AMBIGUOUS_SUM_TYPE Expr
     -- | ERROR_AMBIGUOUS_VARIANT_TYPE
     -- ERROR_AMBIGUOUS_LIST
     -- | ERROR_ILLEGAL_EMPTY_MATCHING
@@ -311,15 +309,15 @@ exprCheck env (DotRecord expr ident) ty =
         InferOk _                           -> CheckErr (ERROR_NOT_A_RECORD expr)
         InferErr err                        -> CheckErr err
 
--- -- ====== T-Inl ======
--- exprCheck env (Inl expr) (TypeSum t1 t2) = exprCheck env expr t1
+-- ====== T-Inl ======
+exprCheck env (Inl expr) (TypeSum t1 t2) = exprCheck env expr t1
 
--- exprCheck env (Inl expr) _ = CheckErr (ERROR_UNEXPECTED_INJECTION expr)
+exprCheck env (Inl expr) _ = CheckErr (ERROR_UNEXPECTED_INJECTION expr)
 
 -- -- ====== T-Inr ======
--- exprCheck env (Inr expr) (TypeSum t1 t2) = exprCheck env expr t2
+exprCheck env (Inr expr) (TypeSum t1 t2) = exprCheck env expr t2
 
--- exprCheck env (Inr expr) _ = CheckErr (ERROR_UNEXPECTED_INJECTION expr)
+exprCheck env (Inr expr) _ = CheckErr (ERROR_UNEXPECTED_INJECTION expr)
 
 -- -- ====== T-Case ======
 -- exprCheck env (Match t1 cases) tyC =
@@ -614,11 +612,11 @@ exprInfer env (DotRecord expr ident) =
         InferOk otherTy         -> InferErr (ERROR_NOT_A_RECORD expr)
         InferErr err            -> InferErr err
 
--- -- ====== T-Inl ======
--- exprInfer env (Inl expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
+-- ====== T-Inl ======
+exprInfer env (Inl expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 
--- -- ====== T-Inr ======
--- exprInfer env (Inr expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
+-- ====== T-Inr ======
+exprInfer env (Inr expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 
 -- -- ====== T-Case ======
 -- exprInfer env (Match t1 cases) =
