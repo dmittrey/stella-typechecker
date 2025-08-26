@@ -1,0 +1,13 @@
+language core;
+extend with #variants, #lists,#unit-type,#natural-literals,#structural-patterns;
+
+fn listVar(flag : Bool) -> <| lst : [Nat], empty : Unit |> {
+  return if flag then <| lst = [1,2,3] |> else <| empty = unit |>
+}
+
+fn main(flag : Bool) -> Nat {
+  return match listVar(flag) {
+      <| lst = xs |> => List::head(xs)
+    | <| empty = unit |> => 0
+  }
+}
