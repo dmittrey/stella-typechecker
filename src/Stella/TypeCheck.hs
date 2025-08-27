@@ -317,15 +317,6 @@ exprCheck env (Inr expr) (TypeSum t1 t2) = exprCheck env expr t2
 
 exprCheck env (Inr expr) _ = CheckErr (ERROR_UNEXPECTED_INJECTION expr)
 
--- -- ====== T-Case ======
-exprCheck env (Match t1 []) tyC =
-    CheckErr ERROR_ILLEGAL_EMPTY_MATCHING
-
-exprCheck env (Match t1 cases) tyC =
-    case exprInfer env t1 of
-        InferErr err -> CheckErr err
-        InferOk ty1  -> checkMatchCases env cases ty1 tyC
-
 -- ====== T-Variant ======
 exprCheck env (Variant ident exprData) (TypeVariant fields) =
     -- Проверяем на дубликаты в типе варианта
@@ -345,6 +336,16 @@ exprCheck env (Variant ident exprData) (TypeVariant fields) =
                 VariantFieldMissing -> CheckErr (ERROR_UNEXPECTED_VARIANT_LABEL ident)
 
 exprCheck _ expr@(Variant _ _) _ = CheckErr (ERROR_UNEXPECTED_VARIANT expr)
+
+-- -- ====== T-Case ======
+exprCheck env (Match t []) tyC =
+    CheckErr ERROR_ILLEGAL_EMPTY_MATCHING
+
+-- При проверке против типа, я должен вывести тип терма, а потом подставляя match case проверять против типа tyC
+exprCheck env (Match t cases) tyC =
+    case exprInfer env t of
+        InferErr err -> CheckErr err
+        InferOk ty  -> checkMatchCases env cases ty tyC
 
 -- ====== Other ======
 
@@ -567,25 +568,21 @@ exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
 
 -- ====== HELPERS ======
 
-lookupVariantType :: StellaIdent -> Type -> Type
-lookupVariantType tag (TypeVariant fields) =
-    case [ty | AVariantFieldType tName (SomeTyping ty) <- fields, tName == tag] of
-        [ty] -> ty
-        []   -> error "tag not found in variant type"  -- или вернуть безопасно InferErr
-        _    -> error "duplicate tags in variant type"
-lookupVariantType _ _ = error "not a variant type"
-
 checkMatchCases :: Env -> [MatchCase] -> Type -> Type -> CheckResult
--- для суммы
+-- TypeSum
 checkMatchCases env cases (TypeSum t1 t2) tyC =
-    checkMatchCasesSumFlags env cases (TypeSum t1 t2) tyC
+    checkMatchCasesSum env cases (TypeSum t1 t2) tyC
 
--- для остальных типов
+-- TypeVariant
+checkMatchCases env cases (TypeVariant fields) tyC =
+    checkMatchCasesVariant env cases (TypeVariant fields) tyC
+
+-- Others
 checkMatchCases _ cases _ _ =
     CheckErr (C_ERROR_EXPR_NOT_IMPLEMENTED_YET_I cases)
 
-checkMatchCasesSumFlags :: Env -> [MatchCase] -> Type -> Type -> CheckResult
-checkMatchCasesSumFlags env cases (TypeSum tl tr) tyC =
+checkMatchCasesSum :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesSum env cases (TypeSum tl tr) tyC =
     go cases False False
   where
     go [] seenL seenR
@@ -602,36 +599,31 @@ checkMatchCasesSumFlags env cases (TypeSum tl tr) tyC =
               in res >>> go rest seenL True
           _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeSum tl tr))
 
-checkMatchCasesVariantFlags 
-  :: Env            -- окружение
-  -> [MatchCase]    -- список веток match
-  -> [StellaIdent]  -- все возможные теги варианта
-  -> Type           -- тип варианта, на который делаем match
-  -> CheckResult
-checkMatchCasesVariantFlags env cases variants tyC = go cases initialMap
+checkMatchCasesVariant :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesVariant env cases (TypeVariant fields) tyC =
+    let initialMap = Map.fromList [(ident, False) | AVariantFieldType ident ty <- fields]
+  in
+    go cases initialMap
   where
-    -- карта тегов: True если уже обработан
-    initialMap = Map.fromList [(v, False) | v <- variants]
-
     go [] seenMap
       | not (all id (Map.elems seenMap)) = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
       | otherwise                        = CheckOk
-
-    go (AMatchCase (PatternVariant tag patData) expr : rest) seenMap =
-      case Map.lookup tag seenMap of
-        Nothing -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE tyC)
-        Just _  -> 
-          -- извлекаем паттерн из PatternData
-          let bindPatResult = case patData of
-                                NoPatternData       -> InferOk env
-                                SomePatternData pat -> bindPattern env pat (lookupVariantType tag tyC)
-          in case bindPatResult of
-               InferErr err -> CheckErr err
-               InferOk env' -> exprCheck env' expr tyC >>> go rest (Map.insert tag True seenMap)
-
-    -- если встретился неожиданный паттерн, который не PatternVariant
-    go _ _ = CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE tyC)
-
+    go (AMatchCase pat expr : rest) seenMap =
+        case pat of
+            PatternVariant ident patData ->
+                case patData of
+                    NoPatternData       -> exprCheck env expr tyC
+                    SomePatternData pat ->
+                        case lookupVariantField ident fields of
+                            VariantFieldExistSomeType ty ->
+                                let res = bindPattern env pat ty >>= \env' -> exprCheck env' expr tyC
+                                in res >>> go rest (Map.insert ident True seenMap)
+                            VariantFieldExistNoType ->
+                                let res = exprCheck env expr tyC
+                                in res >>> go rest (Map.insert ident True seenMap)
+                            VariantFieldMissing ->
+                                CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
+            _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
 
 -- (-) PatternCastAs Pattern Type
 -- (-) PatternAsc Pattern Type
@@ -650,17 +642,14 @@ checkMatchCasesVariantFlags env cases variants tyC = go cases initialMap
 -- (+) PatternVar StellaIdent
 bindPattern :: Env -> Pattern -> Type -> InferResult Env
 
--- переменная связывается с типом
 bindPattern env (PatternVar ident) t =
     InferOk (env ++ [(ident, t)])
 
--- Inl p :: Sum τ1 τ2
 bindPattern env (PatternInl p) (TypeSum t1 _) =
     bindPattern env p t1
 bindPattern _   (PatternInl _) ty =
     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
 
--- Inr p :: Sum τ1 τ2
 bindPattern env (PatternInr p) (TypeSum _ t2) =
     bindPattern env p t2
 bindPattern _   (PatternInr _) ty =
@@ -670,9 +659,28 @@ bindPattern env PatternTrue TypeBool =
     InferOk env
 bindPattern _   PatternTrue ty =
     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
-bindPattern env PatternFalse TypeBool = InferOk env
+
+bindPattern env PatternFalse TypeBool =
+    InferOk env
 bindPattern _   PatternFalse ty =
     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env PatternUnit TypeUnit =
+    InferOk env
+bindPattern _   PatternUnit ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env (PatternVariant ident patData) (TypeVariant fields) =
+    case patData of
+        NoPatternData       -> InferOk env
+        SomePatternData pat ->
+            case lookupVariantField ident fields of
+                VariantFieldExistSomeType ty ->
+                    bindPattern env pat ty
+                VariantFieldExistNoType ->
+                    InferOk env
+                VariantFieldMissing ->
+                    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
 
 -- временный fallback: все остальные паттерны пока не поддерживаем
 bindPattern _ pat ty =
