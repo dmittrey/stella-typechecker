@@ -18,9 +18,6 @@ import Prelude
 -- Variant
 -- Fixed point
 
--- Let errors
--- 8. Организовать тестовое покрытие(переназвать файлы, пройтись по кейсам)
-
 data MissingMatchCase
     = MissingInr
     | MissingInl
@@ -48,24 +45,24 @@ data CErrType
     | ERROR_UNEXPECTED_TYPE_FOR_PARAMETER StellaIdent Type Type -- Ident Expected Got
     | ERROR_UNEXPECTED_TUPLE Expr Type
     | ERROR_UNEXPECTED_RECORD Expr Type
-    -- | ERROR_UNEXPECTED_VARIANT Expr
+    | ERROR_UNEXPECTED_VARIANT Expr
     -- ERROR_UNEXPECTED_LIST
     | ERROR_UNEXPECTED_INJECTION Expr
     | ERROR_MISSING_RECORD_FIELDS
     | ERROR_UNEXPECTED_RECORD_FIELDS
     | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
-    -- | ERROR_UNEXPECTED_VARIANT_LABEL
+    | ERROR_UNEXPECTED_VARIANT_LABEL StellaIdent
     | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
     | ERROR_UNEXPECTED_TUPLE_LENGTH
     | ERROR_AMBIGUOUS_SUM_TYPE Expr
-    -- | ERROR_AMBIGUOUS_VARIANT_TYPE
+    | ERROR_AMBIGUOUS_VARIANT_TYPE Expr
     -- ERROR_AMBIGUOUS_LIST
     | ERROR_ILLEGAL_EMPTY_MATCHING
     | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase]
     | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Type
     | ERROR_DUPLICATE_RECORD_FIELDS
     | ERROR_DUPLICATE_RECORD_TYPE_FIELDS
-    -- ERROR_DUPLICATE_VARIANT_TYPE_FIELDS
+    | ERROR_DUPLICATE_VARIANT_TYPE_FIELDS Type
   deriving (Eq, Ord, Show, Read)
 
 -- Окружение: имя переменной → её тип
@@ -329,14 +326,25 @@ exprCheck env (Match t1 cases) tyC =
         InferErr err -> CheckErr err
         InferOk ty1  -> checkMatchCases env cases ty1 tyC
 
--- -- ====== T-Variant ======
--- exprCheck env (Variant ident exprData) (TypeVariant fields) =
---     let identToType = [(ident, t) | AVariantFieldType ident t <- fields]
---     in case lookup ident identToType of
---         Just t -> CheckOk
---         Nothing -> CheckErr ERROR_UNEXPECTED_VARIANT_LABEL
+-- ====== T-Variant ======
+exprCheck env (Variant ident exprData) (TypeVariant fields) =
+    -- Проверяем на дубликаты в типе варианта
+    let fieldNames = [ name | AVariantFieldType name _ <- fields ]
+    in  if length fieldNames /= Set.size (Set.fromList fieldNames)
+            then CheckErr (ERROR_DUPLICATE_VARIANT_TYPE_FIELDS (TypeVariant fields))
+        else
+            case lookupVariantField ident fields of
+                VariantFieldExistSomeType ty ->
+                    case exprData of
+                        NoExprData -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S)
+                        SomeExprData expr -> exprCheck env expr ty
+                VariantFieldExistNoType ->
+                    case exprData of
+                        NoExprData -> CheckOk
+                        SomeExprData expr -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S)
+                VariantFieldMissing -> CheckErr (ERROR_UNEXPECTED_VARIANT_LABEL ident)
 
--- exprCheck env expr@(Variant ident exprData) _ = CheckErr (ERROR_UNEXPECTED_VARIANT expr)
+exprCheck _ expr@(Variant _ _) _ = CheckErr (ERROR_UNEXPECTED_VARIANT expr)
 
 -- ====== Other ======
 
@@ -547,6 +555,9 @@ exprInfer env (Inl expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 -- ====== T-Inr ======
 exprInfer env (Inr expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 
+-- ====== T-Variant ======
+exprInfer env expr@(Variant ident exprData) = InferErr (ERROR_AMBIGUOUS_VARIANT_TYPE expr)
+
 -- Other
 
 -- T-Natural
@@ -666,3 +677,19 @@ bindPattern _   PatternFalse ty =
 -- временный fallback: все остальные паттерны пока не поддерживаем
 bindPattern _ pat ty =
     InferErr (ERROR_PATTERN_NOT_SUPPORTED pat ty)
+
+data VariantFieldLookupStatus
+    = VariantFieldExistSomeType Type
+    | VariantFieldExistNoType
+    | VariantFieldMissing
+  deriving (Eq, Ord, Show, Read)
+
+-- Вспомогательная функция для поиска тега в TypeVariant
+lookupVariantField :: StellaIdent -> [VariantFieldType] -> VariantFieldLookupStatus
+lookupVariantField ident fields =
+    let nameToOptType = [(n, t) | AVariantFieldType n t <- fields]
+    in
+        case lookup ident nameToOptType of
+            Just (SomeTyping t)     -> VariantFieldExistSomeType t
+            Just (NoTyping)         -> VariantFieldExistNoType
+            Nothing                 -> VariantFieldMissing
