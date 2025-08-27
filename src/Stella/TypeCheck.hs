@@ -14,9 +14,8 @@ import Prelude
 
 -- TODO
 
--- Lists
--- Variant
--- Fixed point
+-- Lists (List,ConsList) + testcases
+-- Fixed point + testcases
 
 data MissingMatchCase
     = MissingInr
@@ -46,7 +45,7 @@ data CErrType
     | ERROR_UNEXPECTED_TUPLE Expr Type
     | ERROR_UNEXPECTED_RECORD Expr Type
     | ERROR_UNEXPECTED_VARIANT Expr
-    -- ERROR_UNEXPECTED_LIST
+    | ERROR_UNEXPECTED_LIST Expr
     | ERROR_UNEXPECTED_INJECTION Expr
     | ERROR_MISSING_RECORD_FIELDS
     | ERROR_UNEXPECTED_RECORD_FIELDS
@@ -56,7 +55,8 @@ data CErrType
     | ERROR_UNEXPECTED_TUPLE_LENGTH
     | ERROR_AMBIGUOUS_SUM_TYPE Expr
     | ERROR_AMBIGUOUS_VARIANT_TYPE Expr
-    -- ERROR_AMBIGUOUS_LIST
+    | ERROR_AMBIGUOUS_LIST
+    | ERROR_NOT_A_LIST Type
     | ERROR_ILLEGAL_EMPTY_MATCHING
     | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase]
     | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Type
@@ -337,6 +337,45 @@ exprCheck env (Variant ident exprData) (TypeVariant fields) =
 
 exprCheck _ expr@(Variant _ _) _ = CheckErr (ERROR_UNEXPECTED_VARIANT expr)
 
+-- ====== T-Head ======
+exprCheck env (Head expr) ty =
+    exprCheck env expr (TypeList ty)
+
+-- ====== T-Tail ======
+exprCheck env (Tail expr) ty =
+    exprCheck env expr (TypeList ty)
+
+-- ====== T-IsEmpty ======
+exprCheck env (IsEmpty expr) TypeBool =
+    case exprInfer env expr of
+        InferErr err ->
+            CheckErr err
+        InferOk (TypeList ty) ->
+            CheckOk
+        InferOk ty ->
+            CheckErr (ERROR_NOT_A_LIST ty)
+
+exprCheck env e@(IsEmpty expr) ty =
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e TypeBool ty)
+
+-- ====== T-List ======
+exprCheck env (List []) (TypeList ty) = 
+    CheckOk
+
+exprCheck env (List (e : exprs)) (TypeList ty) =
+    exprCheck env e ty
+    >>> exprCheck env (List exprs) (TypeList ty)
+
+exprCheck env e@(List exprs) ty =
+    CheckErr (ERROR_UNEXPECTED_LIST e)
+
+-- ====== T-ConsList ======
+-- TODO
+
+-- ERROR_NOT_A_FUNCTION — при попытке применить (Application) выражение к аргументу или передать в комбинатор неподвижной точки (Fix), выражение оказывается не функцией; ошибка должна возникать до проверки типа аргумента;
+-- ====== T-Fix ======
+-- TODO
+
 -- -- ====== T-Case ======
 exprCheck env (Match t []) tyC =
     CheckErr ERROR_ILLEGAL_EMPTY_MATCHING
@@ -559,6 +598,49 @@ exprInfer env (Inr expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 -- ====== T-Variant ======
 exprInfer env expr@(Variant ident exprData) = InferErr (ERROR_AMBIGUOUS_VARIANT_TYPE expr)
 
+-- ERROR_AMBIGUOUS_LIST — тип списка (List или ConsList) невозможно определить (в данном контексте отсутсвует ожидаемый тип списка);
+-- ERROR_NOT_A_LIST — при попытке извлечь голову (Head), извлечь хвост (Tail) или проверить список на наличие элементов (IsEmpty), соответствующий аргумент оказывается не списком (TypeList);
+-- ERROR_UNEXPECTED_LIST — в процессе проверки типов список (List или ConsList) проверя- ется c типом отличным от типа списка (TypeList); ошибка должна возникать до проверки типа самого списка;
+
+-- ====== T-Head ======
+exprInfer env (Head expr) =
+    case exprInfer env expr of
+        InferOk (TypeList ty) ->
+            InferOk ty
+        InferOk ty ->
+            InferErr (ERROR_NOT_A_LIST ty)
+        InferErr err ->
+            InferErr err
+
+-- ====== T-Tail ======
+exprInfer env (Tail expr) =
+    case exprInfer env expr of
+        InferOk (TypeList ty) ->
+            InferOk ty
+        InferOk ty ->
+            InferErr (ERROR_NOT_A_LIST ty)
+        InferErr err ->
+            InferErr err
+
+-- ====== T-IsEmpty ======
+exprInfer env (IsEmpty expr) =
+    case exprInfer env expr of
+        InferOk (TypeList ty) ->
+            InferOk TypeBool
+        InferOk ty ->
+            InferErr (ERROR_NOT_A_LIST ty)
+        InferErr err ->
+            InferErr err
+
+-- ====== T-List ======
+-- TODO
+
+-- ====== T-ConsList ======
+-- TODO
+
+-- ====== T-Fix ======
+-- TODO
+
 -- Other
 
 -- T-Natural
@@ -569,6 +651,7 @@ exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
 -- ====== HELPERS ======
 
 checkMatchCases :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+
 -- TypeSum
 checkMatchCases env cases (TypeSum t1 t2) tyC =
     checkMatchCasesSum env cases (TypeSum t1 t2) tyC
@@ -627,7 +710,7 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
 
 -- (-) PatternCastAs Pattern Type
 -- (-) PatternAsc Pattern Type
--- (-) PatternVariant StellaIdent PatternData
+-- (+) PatternVariant StellaIdent PatternData
 -- (+) PatternInl Pattern
 -- (+) PatternInr Pattern
 -- (-) PatternTuple [Pattern]
@@ -636,7 +719,7 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
 -- (-) PatternCons Pattern Pattern
 -- (+) PatternFalse
 -- (+) PatternTrue
--- (-) PatternUnit
+-- (+) PatternUnit
 -- (-) PatternInt Integer
 -- (-) PatternSucc Pattern
 -- (+) PatternVar StellaIdent
