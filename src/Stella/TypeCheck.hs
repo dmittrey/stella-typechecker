@@ -12,11 +12,6 @@ import Data.Maybe
 import Data.List
 import Prelude
 
--- TODO
-
--- Lists (List,ConsList) + testcases
--- Fixed point + testcases
-
 data MissingMatchCase
     = MissingInr
     | MissingInl
@@ -362,6 +357,9 @@ exprCheck env e@(IsEmpty expr) ty =
 exprCheck env (List []) (TypeList ty) = 
     CheckOk
 
+exprCheck env (List (e : [])) (TypeList ty) =
+    exprCheck env e ty
+
 exprCheck env (List (e : exprs)) (TypeList ty) =
     exprCheck env e ty
     >>> exprCheck env (List exprs) (TypeList ty)
@@ -370,11 +368,18 @@ exprCheck env e@(List exprs) ty =
     CheckErr (ERROR_UNEXPECTED_LIST e)
 
 -- ====== T-ConsList ======
--- TODO
+exprCheck env (ConsList e1 e2) (TypeList ty) =
+    exprCheck env e1 ty
+    >>> exprCheck env e2 (TypeList ty)
 
--- ERROR_NOT_A_FUNCTION — при попытке применить (Application) выражение к аргументу или передать в комбинатор неподвижной точки (Fix), выражение оказывается не функцией; ошибка должна возникать до проверки типа аргумента;
+exprCheck env e@(ConsList e1 e2) ty =
+    CheckErr (ERROR_UNEXPECTED_LIST e)
+
 -- ====== T-Fix ======
--- TODO
+exprCheck env (Fix expr@(Abstraction params e)) ty =
+    exprCheck env expr (TypeFun [ty] ty)
+
+exprCheck env (Fix expr) ty = CheckErr (ERROR_NOT_A_FUNCTION expr)
 
 -- -- ====== T-Case ======
 exprCheck env (Match t []) tyC =
@@ -598,10 +603,6 @@ exprInfer env (Inr expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 -- ====== T-Variant ======
 exprInfer env expr@(Variant ident exprData) = InferErr (ERROR_AMBIGUOUS_VARIANT_TYPE expr)
 
--- ERROR_AMBIGUOUS_LIST — тип списка (List или ConsList) невозможно определить (в данном контексте отсутсвует ожидаемый тип списка);
--- ERROR_NOT_A_LIST — при попытке извлечь голову (Head), извлечь хвост (Tail) или проверить список на наличие элементов (IsEmpty), соответствующий аргумент оказывается не списком (TypeList);
--- ERROR_UNEXPECTED_LIST — в процессе проверки типов список (List или ConsList) проверя- ется c типом отличным от типа списка (TypeList); ошибка должна возникать до проверки типа самого списка;
-
 -- ====== T-Head ======
 exprInfer env (Head expr) =
     case exprInfer env expr of
@@ -633,13 +634,47 @@ exprInfer env (IsEmpty expr) =
             InferErr err
 
 -- ====== T-List ======
--- TODO
+exprInfer env (List []) =
+    InferErr ERROR_AMBIGUOUS_LIST
+
+exprInfer env (List (e:es)) =
+    case exprInfer env e of
+        InferErr err -> InferErr err
+        InferOk tyElem -> checkAll es tyElem
+  where
+    checkAll :: [Expr] -> Type -> InferResult Type
+    checkAll [] ty = InferOk (TypeList ty)
+    checkAll (x:xs) ty =
+        case exprCheck env x ty of
+            CheckErr err -> InferErr err
+            CheckOk      -> checkAll xs ty
+
 
 -- ====== T-ConsList ======
--- TODO
+exprInfer env (ConsList e1 e2) =
+    case exprInfer env e1 of
+        InferOk ty ->
+            case exprCheck env e2 (TypeList ty) of
+                CheckOk ->
+                    InferOk (TypeList ty)
+                CheckErr err ->
+                    InferErr err
+        InferErr err ->
+            InferErr err
 
 -- ====== T-Fix ======
--- TODO
+exprInfer env (Fix expr) =
+    case exprInfer env expr of
+        InferOk (TypeFun paramTys retTy) ->
+            case exprCheck env expr (TypeFun [retTy] retTy) of
+                CheckOk ->
+                    InferOk retTy
+                CheckErr err ->
+                    InferErr err
+        InferOk ty ->
+            InferErr (ERROR_NOT_A_FUNCTION expr)
+        InferErr err ->
+            InferErr err
 
 -- Other
 
