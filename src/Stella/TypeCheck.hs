@@ -17,6 +17,10 @@ data MissingMatchCase
     | MissingInl
   deriving (Eq, Ord, Show, Read)
 
+-- #nullary-functions и #multiparameter-functions:
+-- #structural-patterns 
+-- #nullary-variant-labels
+
 -- Типы ошибок
 data CErrType
     = C_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr Type
@@ -94,15 +98,29 @@ declCheck env (DeclFun _ name [] NoReturnType _ _ expr) =
     (exprCheck env expr TypeUnit, env)
 declCheck env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
     (exprCheck env expr retTy, env)
+
+-- Core, #nested-function-declarations
 declCheck env (DeclFun anns name paramsAnn retTy throwTy decls expr) =
-    let env'        = updateEnvByParams env paramsAnn
-        resultTy    = case retTy of
-                        NoReturnType      -> TypeUnit
-                        SomeReturnType ty -> ty
-        funTy       = TypeFun [t | AParamDecl _ t <- paramsAnn] resultTy
-        (checkRes, innerEnv) =
-            declCheck env' (DeclFun anns name [] retTy throwTy decls expr)
-    in (checkRes, innerEnv ++ [(name, funTy)])
+    let
+        -- добавляем параметры в локальное окружение
+        env' = updateEnvByParams env paramsAnn
+
+        -- сначала обрабатываем внутренние функции/decls
+        (resInner, envInner) = foldl step (CheckOk, env') decls
+
+        resultTy = case retTy of
+                    NoReturnType      -> TypeUnit
+                    SomeReturnType ty -> ty
+
+        funTy    = TypeFun [t | AParamDecl _ t <- paramsAnn] resultTy
+
+        resBody  = exprCheck envInner expr resultTy
+        in
+        (resBody >>> resInner, env ++ [(name, funTy)])
+    where
+        step :: (CheckResult, Env) -> Decl -> (CheckResult, Env)
+        step (CheckOk, envAcc) d = declCheck envAcc d
+        step (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
 
 declCheck e d = (CheckErr (C_ERROR_DECL_NOT_IMPLEMENTED_YET d), e)
 
@@ -391,15 +409,17 @@ exprCheck env (Match t cases) tyC =
         InferErr err -> CheckErr err
         InferOk ty  -> checkMatchCases env cases ty tyC
 
+-- ====== T-Natural ======
+exprCheck _ (ConstInt n) TypeNat = CheckOk -- #natural-literals
+exprCheck _ (ConstInt n) t =
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstInt n) TypeNat t)
+
 -- ====== Other ======
 
 -- T-Add
 exprCheck env (Add e1 e2) TypeNat = 
     exprCheck env e1 TypeNat
     >>> exprCheck env e2 TypeNat
-
--- T-Natural
-exprCheck _ (ConstInt n) TypeNat = CheckOk
 
 -- T-Equal
 exprCheck env (Equal e1 e2) t =
@@ -676,10 +696,10 @@ exprInfer env (Fix expr) =
         InferErr err ->
             InferErr err
 
--- Other
+-- ====== T-Natural ======
+exprInfer _ (ConstInt n) = InferOk TypeNat -- #natural-literals
 
--- T-Natural
-exprInfer _ (ConstInt n) = InferOk TypeNat
+-- Other
 
 exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
 
