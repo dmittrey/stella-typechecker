@@ -13,3 +13,7 @@ bnfc :
 
 distclean :
 	-rm -rf src/
+
+tests: all
+	cd examples && pwd && ./check_all.sh
+
