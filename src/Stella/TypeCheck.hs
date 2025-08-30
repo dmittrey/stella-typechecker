@@ -22,14 +22,12 @@ data MissingMatchCase
 
 -- Типы ошибок
 data CErrType
-    = C_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr Type
-    | C_ERROR_DECL_NOT_IMPLEMENTED_YET Decl
-    | I_ERROR_EXPR_NOT_IMPLEMENTED_YET Expr
-    | ERROR_Unknown_ident_for_binding [Expr] [Type]
-    | C_ERROR_EXPR_NOT_IMPLEMENTED_YET_I [MatchCase]
+    = ERROR_DECL_CHECK_NOT_IMPLEMENTED Decl
+    | ERROR_EXPR_CHECK_NOT_IMPLEMENTED Expr Type
+    | ERROR_EXPR_INFER_NOT_IMPLEMENTED Expr
     | ERROR_PATTERN_NOT_SUPPORTED Pattern Type
-    -- | I_ERROR_EXPR_NOT_IMPLEMENTED_YET_I Pattern
-    -- | I_ERROR_EXPR_NOT_IMPLEMENTED_YET_I_I [MatchCase]
+    | ERROR_MATCH_NOT_SUPPORTED Type
+    | ERROR_PATTERN_TYPE_REQUIRED_FOR_LETREC Pattern
 
     | ERROR_MISSING_MAIN
     | ERROR_UNDEFINED_VARIABLE StellaIdent
@@ -58,6 +56,7 @@ data CErrType
     | ERROR_ILLEGAL_EMPTY_MATCHING
     | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase]
     | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Type
+    | ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M Pattern Type
     | ERROR_DUPLICATE_RECORD_FIELDS
     | ERROR_DUPLICATE_RECORD_TYPE_FIELDS
     | ERROR_DUPLICATE_VARIANT_TYPE_FIELDS Type
@@ -108,31 +107,37 @@ declCheck env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
 -- Core, #nested-function-declarations, #nullary-functions
 declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throwTy decls expr) =
     let
-        -- добавляем параметры в локальное окружение
-        env' = updateEnvByParams env paramsAnn
-
-        -- сначала обрабатываем внутренние функции/decls
-        (resInner, envInner) = foldl step (CheckOk, env') decls
-
         resultTy = case retTy of
                     NoReturnType      -> TypeUnit
                     SomeReturnType ty -> ty
 
         funTy    = TypeFun [t | AParamDecl _ t <- paramsAnn] resultTy
 
-        resBody  = exprCheck envInner expr resultTy
+        -- Функция должна быть доступна самой себе (для рекурсии)
+        envWithFun = env ++ [(funIdent, funTy)]
 
-        isMainUnary = if funName == "main"
-            then if length paramsAnn /= 1 then CheckErr ERROR_INCORRECT_ARITY_OF_MAIN 
-            else CheckOk else CheckOk
-        in
-        (isMainUnary >>> resBody >>> resInner, env ++ [(funIdent, funTy)])
-    where
-        step :: (CheckResult, Env) -> Decl -> (CheckResult, Env)
-        step (CheckOk, envAcc) d = declCheck envAcc d
-        step (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
+        -- добавляем параметры в локальное окружение
+        env' = updateEnvByParams envWithFun paramsAnn
 
-declCheck e d = (CheckErr (C_ERROR_DECL_NOT_IMPLEMENTED_YET d), e)
+        -- сначала обрабатываем внутренние функции/decls
+        (resInner, envInner) = foldl step (CheckOk, env') decls
+
+        -- проверка тела
+        resBody = exprCheck envInner expr resultTy
+
+        isMainUnary =
+          if funName == "main"
+            then if length paramsAnn /= 1
+                   then CheckErr ERROR_INCORRECT_ARITY_OF_MAIN
+                   else CheckOk
+            else CheckOk
+    in
+        (isMainUnary >>> resBody >>> resInner, envWithFun)
+  where
+    step (CheckOk, envAcc) d = declCheck envAcc d
+    step (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
+
+declCheck e d = (CheckErr (ERROR_DECL_CHECK_NOT_IMPLEMENTED d), e)
 
 exprCheck :: Env -> Expr -> Type -> CheckResult
 
@@ -199,9 +204,8 @@ exprCheck env (Abstraction params e) (TypeFun expParamTys retTy) =
   where
     checkParams :: Env -> [ParamDecl] -> [Type] -> (CheckResult, Env)
     checkParams env [] [] = (CheckOk, env)
-    checkParams env [] _  = (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
-    checkParams env _  [] = (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
     checkParams env ((AParamDecl ident actualTy):ps) (ty:tys)
+        | length ps /= length tys = (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
         | actualTy /= ty = (CheckErr (ERROR_UNEXPECTED_TYPE_FOR_PARAMETER ident ty actualTy), env)
         | otherwise =
             let (res, env') = checkParams env ps tys
@@ -256,6 +260,26 @@ exprCheck env (Let bindings expr) t =
                 bindPattern env p ty
             InferErr err ->
                 InferErr err
+
+-- ====== T-LetRec ======
+exprCheck env (LetRec bindings body) tyC =
+    case foldl step (InferOk env) bindings of
+        InferOk env' -> exprCheck env' body tyC
+        InferErr err -> CheckErr err
+  where
+    step :: InferResult Env -> PatternBinding -> InferResult Env
+    step (InferOk envAcc) (APatternBinding pat e) =
+        case pat of
+            PatternAsc p@(PatternVar pIdent) tyAnn ->
+                case bindPattern (envAcc ++ [(pIdent, tyAnn)]) p tyAnn of
+                    InferOk env' -> 
+                        case exprCheck env' e tyAnn of
+                            CheckOk -> InferOk env'
+                            CheckErr err -> InferErr err
+                    InferErr err -> InferErr err
+            _ -> InferErr (ERROR_PATTERN_TYPE_REQUIRED_FOR_LETREC pat)
+
+    step (InferErr err) _ = InferErr err
 
 -- ====== T-Tuple ======
 exprCheck env (Tuple []) (TypeTuple []) =
@@ -407,6 +431,9 @@ exprCheck env e@(ConsList e1 e2) ty =
 exprCheck env (Fix expr@(Abstraction params e)) ty =
     exprCheck env expr (TypeFun [ty] ty)
 
+exprCheck env (Fix expr@(Var ident)) ty =
+    exprCheck env expr (TypeFun [ty] ty)
+
 exprCheck env (Fix expr) ty = CheckErr (ERROR_NOT_A_FUNCTION expr)
 
 -- -- ====== T-Case ======
@@ -439,7 +466,7 @@ exprCheck env (Equal e1 e2) t =
         InferErr err ->
             CheckErr err
 
-exprCheck _ e t = CheckErr (C_ERROR_EXPR_NOT_IMPLEMENTED_YET e t)
+exprCheck _ e t = CheckErr (ERROR_EXPR_CHECK_NOT_IMPLEMENTED e t)
 
 -- -- Результат вывода типа
 type InferResult = Either CErrType
@@ -711,27 +738,92 @@ exprInfer _ (ConstInt n) = InferOk TypeNat -- #natural-literals
 
 -- Other
 
-exprInfer _ e = InferErr (I_ERROR_EXPR_NOT_IMPLEMENTED_YET e)
+exprInfer _ e = InferErr (ERROR_EXPR_INFER_NOT_IMPLEMENTED e)
 
--- ====== HELPERS ======
+-- ====== Pattern Matching ======
 
+-- (-) TypeAuto
+-- (-) TypeFun [Type] Type
+-- (-) TypeForAll [StellaIdent] Type
+-- (-) TypeRec StellaIdent Type
+-- (+) TypeSum Type Type
+-- (+) TypeTuple [Type]
+-- (+) TypeRecord [RecordFieldType]
+-- (+) TypeVariant [VariantFieldType]
+-- (+) TypeList Type
+-- (+) TypeBool
+-- (+) TypeNat
+-- (+) TypeUnit
+-- (-) TypeTop
+-- (-) TypeBottom
+-- (-) TypeRef Type
+-- (-) TypeVar StellaIdent
 checkMatchCases :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+
+-- TypeAuto
+checkMatchCases env cases TypeAuto tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED TypeAuto)
+
+-- TypeFun
+checkMatchCases env cases t@(TypeFun paramTys retTy) tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED t)
+
+-- TypeForAll
+checkMatchCases env cases t@(TypeForAll idents ty) tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED t)
+
+-- TypeRec
+checkMatchCases env cases t@(TypeRec ident ty) tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED t)
 
 -- TypeSum
 checkMatchCases env cases (TypeSum t1 t2) tyC =
     checkMatchCasesSum env cases (TypeSum t1 t2) tyC
 
--- TypeVariant
-checkMatchCases env cases (TypeVariant fields) tyC =
-    checkMatchCasesVariant env cases (TypeVariant fields) tyC
-
 -- TypeTuple
 checkMatchCases env cases (TypeTuple tys) tyC =
     checkMatchCasesTuple env cases (TypeTuple tys) tyC
 
--- Others
-checkMatchCases _ cases _ _ =
-    CheckErr (C_ERROR_EXPR_NOT_IMPLEMENTED_YET_I cases)
+-- TypeRecord
+checkMatchCases env cases (TypeRecord fields) tyC =
+    checkMatchCasesRecord env cases (TypeRecord fields) tyC
+
+-- TypeVariant
+checkMatchCases env cases (TypeVariant fields) tyC =
+    checkMatchCasesVariant env cases (TypeVariant fields) tyC
+
+-- TypeList
+checkMatchCases env cases (TypeList ty) tyC =
+    checkMatchCasesList env cases (TypeList ty) tyC
+
+-- TypeBool
+checkMatchCases env cases TypeBool tyC =
+    checkMatchCasesBool env cases tyC
+
+-- TypeNat
+checkMatchCases env cases TypeNat tyC =
+    checkMatchCasesNat env cases tyC
+
+-- TypeUnit
+checkMatchCases env cases TypeUnit tyC =
+    checkMatchCasesUnit env cases tyC
+
+-- TypeTop
+checkMatchCases env cases TypeTop tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED TypeTop)
+
+-- TypeBottom
+checkMatchCases env cases TypeBottom tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED TypeBottom)
+
+-- TypeRef
+checkMatchCases env cases t@(TypeRef ty) tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED t)
+
+-- TypeVar
+checkMatchCases env cases t@(TypeVar ident) tyC =
+    CheckErr (ERROR_MATCH_NOT_SUPPORTED t)
+
 
 checkMatchCasesSum :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesSum env cases (TypeSum tl tr) tyC =
@@ -750,6 +842,43 @@ checkMatchCasesSum env cases (TypeSum tl tr) tyC =
               let res = bindPattern env pr tr >>= \envR -> exprCheck envR expr tyC
               in res >>> go rest seenL True
           _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeSum tl tr))
+
+checkMatchCasesTuple :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesTuple env cases (TypeTuple tys) tyC =
+    go cases tys
+  where
+    go [] _ = CheckOk
+    go (AMatchCase pat expr : rest) tys =
+        case pat of
+            PatternTuple pats ->
+                let bindAll e [] [] = InferOk e
+                    bindAll e (p:ps) (t:ts) =
+                        bindPattern e p t >>= \e' -> bindAll e' ps ts
+                    bindAll _ _ _ = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
+                in case bindAll env pats tys of
+                     InferErr err -> CheckErr err
+                     InferOk env' -> exprCheck env' expr tyC >>> go rest tys
+            _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
+
+checkMatchCasesRecord :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesRecord env cases (TypeRecord fields) tyC =
+    go cases fields
+  where
+    go [] _ = CheckOk
+    go (AMatchCase pat expr : rest) fields =
+        case pat of
+            PatternRecord pats ->
+                let identToType = [(i, ty)  | ARecordFieldType i ty <- fields]
+                    bindAll e [] = InferOk e
+                    bindAll e ((ALabelledPattern ident identPat):ps) =
+                        case lookup ident identToType of
+                            Just ty ->
+                                bindPattern e identPat ty >>= \e' -> bindAll e' ps
+                            Nothing -> InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeRecord fields))
+                in case bindAll env pats of
+                     InferErr err -> CheckErr err
+                     InferOk env' -> exprCheck env' expr tyC >>> go rest fields
+            _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeRecord fields))
 
 checkMatchCasesVariant :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesVariant env cases (TypeVariant fields) tyC =
@@ -783,71 +912,115 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
                                 CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
             _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
 
-checkMatchCasesTuple :: Env -> [MatchCase] -> Type -> Type -> CheckResult
-checkMatchCasesTuple env cases (TypeTuple tys) tyC =
-    go cases tys
+checkMatchCasesList :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesList env cases (TypeList ty) tyC =
+    go cases
   where
-    go [] _ = CheckOk
-    go (AMatchCase pat expr : rest) tys =
+    go :: [MatchCase] -> CheckResult
+    go [] = CheckOk
+    go (AMatchCase pat expr : rest) =
         case pat of
-            PatternTuple pats ->
-                let bindAll e [] [] = InferOk e
-                    bindAll e (p:ps) (t:ts) =
-                        bindPattern e p t >>= \e' -> bindAll e' ps ts
-                    bindAll _ _ _ = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
-                in case bindAll env pats tys of
+            PatternList pats ->
+                let bindAll e [] = InferOk e
+                    bindAll e (p:ps) =
+                        bindPattern e p ty >>= \e' -> bindAll e' ps
+                in case bindAll env pats of
                      InferErr err -> CheckErr err
-                     InferOk env' -> exprCheck env' expr tyC >>> go rest tys
-            _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
+                     InferOk env' -> exprCheck env' expr tyC >>> go rest
+            PatternCons patH patT ->
+                case bindPattern env patH ty of
+                    InferErr err -> CheckErr err
+                    InferOk env' ->
+                        case bindPattern env' patT (TypeList ty) of
+                            InferErr err -> CheckErr err
+                            InferOk env'' -> exprCheck env'' expr tyC >>> go rest
+            _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat (TypeList ty))
 
--- • PatternRecord, ALabelledPattern
--- • PatternList, PatternCons
--- • PatternInt, PatternSucc
+checkMatchCasesBool :: Env -> [MatchCase] -> Type -> CheckResult
+checkMatchCasesBool env cases tyC =
+    go cases False False
+  where
+    go [] seenTrue seenFalse
+      | not seenTrue  = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not seenFalse = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | otherwise     = CheckOk
+
+    go (AMatchCase pat expr : rest) seenTrue seenFalse =
+      case pat of
+        PatternTrue  ->
+          exprCheck env expr tyC >>> go rest True seenFalse
+        PatternFalse ->
+          exprCheck env expr tyC >>> go rest seenTrue True
+        PatternVar x ->
+          let env' = (x, TypeBool):env
+          in exprCheck env' expr tyC >>> go rest True True
+        _ ->
+          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeBool)
+
+checkMatchCasesNat :: Env -> [MatchCase] -> Type -> CheckResult
+checkMatchCasesNat env cases tyC =
+    go cases False False
+  where
+    go [] seenZero seenSucc
+      | not seenZero = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not seenSucc = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | otherwise    = CheckOk
+
+    go (AMatchCase pat expr : rest) seenZero seenSucc =
+      case pat of
+        PatternInt 0 ->
+          exprCheck env expr tyC >>> go rest True seenSucc
+        PatternSucc p ->
+          case bindPattern env p TypeNat of
+            InferErr err -> CheckErr err
+            InferOk env' ->
+              exprCheck env' expr tyC >>> go rest seenZero True
+        PatternVar x ->
+          let env' = (x, TypeNat):env
+          in exprCheck env' expr tyC >>> go rest True True
+        _ ->
+          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeNat)
+
+checkMatchCasesUnit :: Env -> [MatchCase] -> Type -> CheckResult
+checkMatchCasesUnit env cases tyC =
+    go cases False
+  where
+    go [] seenUnit
+      | not seenUnit = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | otherwise    = CheckOk
+
+    go (AMatchCase pat expr : rest) seenUnit =
+      case pat of
+        PatternUnit ->
+          exprCheck env expr tyC >>> go rest True
+        PatternVar x ->
+          let env' = (x, TypeUnit):env
+          in exprCheck env' expr tyC >>> go rest True
+        _ ->
+          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeUnit)
 
 -- (-) PatternCastAs Pattern Type
 -- (-) PatternAsc Pattern Type
 -- (+) PatternVariant StellaIdent PatternData
 -- (+) PatternInl Pattern
 -- (+) PatternInr Pattern
--- (-) PatternTuple [Pattern]
--- (-) PatternRecord [LabelledPattern]
--- (-) PatternList [Pattern]
--- (-) PatternCons Pattern Pattern
+-- (+) PatternTuple [Pattern]
+-- (+) PatternRecord [LabelledPattern]
+-- (+) PatternList [Pattern]
+-- (+) PatternCons Pattern Pattern
 -- (+) PatternFalse
 -- (+) PatternTrue
 -- (+) PatternUnit
--- (-) PatternInt Integer
--- (-) PatternSucc Pattern
+-- (+) PatternInt Integer
+-- (+) PatternSucc Pattern
 -- (+) PatternVar StellaIdent
 bindPattern :: Env -> Pattern -> Type -> InferResult Env
 
-bindPattern env (PatternVar ident) t =
-    InferOk (env ++ [(ident, t)])
+bindPattern env p@(PatternCastAs pat ty) t =
+    InferErr (ERROR_PATTERN_NOT_SUPPORTED p t)
 
-bindPattern env (PatternInl p) (TypeSum t1 _) =
-    bindPattern env p t1
-bindPattern _   (PatternInl _) ty =
-    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
-
-bindPattern env (PatternInr p) (TypeSum _ t2) =
-    bindPattern env p t2
-bindPattern _   (PatternInr _) ty =
-    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
-
-bindPattern env PatternTrue TypeBool =
-    InferOk env
-bindPattern _   PatternTrue ty =
-    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
-
-bindPattern env PatternFalse TypeBool =
-    InferOk env
-bindPattern _   PatternFalse ty =
-    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
-
-bindPattern env PatternUnit TypeUnit =
-    InferOk env
-bindPattern _   PatternUnit ty =
-    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+bindPattern env p@(PatternAsc pat ty) t =
+    InferErr (ERROR_PATTERN_NOT_SUPPORTED p t)
 
 bindPattern env (PatternVariant ident patData) (TypeVariant fields) =
     case patData of
@@ -870,19 +1043,83 @@ bindPattern env (PatternVariant ident patData) (TypeVariant fields) =
 bindPattern _   (PatternVariant ident patData) ty =
     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
 
+bindPattern env (PatternInl p) (TypeSum t1 _) =
+    bindPattern env p t1
+bindPattern _   (PatternInl _) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env (PatternInr p) (TypeSum _ t2) =
+    bindPattern env p t2
+bindPattern _   (PatternInr _) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
 bindPattern env (PatternTuple pats) (TypeTuple tys) =
     let bindAll e [] [] = InferOk e
         bindAll e (p:ps) (t:ts) =
             bindPattern e p t >>= \e' -> bindAll e' ps ts
         bindAll _ _ _ = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
     in bindAll env pats tys
-bindPattern _   (PatternVariant ident patData) ty =
+bindPattern _   (PatternTuple _) ty =
     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
 
+bindPattern env (PatternRecord pats) (TypeRecord fields) =
+    let identToType = [(i, ty)  | ARecordFieldType i ty <- fields]
+        bindAll e [] = InferOk e
+        bindAll e ((ALabelledPattern ident identPat):ps) =
+            case lookup ident identToType of
+                Just ty ->
+                    bindPattern e identPat ty >>= \e' -> bindAll e' ps
+                Nothing -> InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeRecord fields))
+    in bindAll env pats
+bindPattern _   (PatternRecord _) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
 
--- временный fallback: все остальные паттерны пока не поддерживаем
-bindPattern _ pat ty =
-    InferErr (ERROR_PATTERN_NOT_SUPPORTED pat ty)
+bindPattern env (PatternList pats) (TypeList ty) =
+    let bindAll e [] = InferOk e
+        bindAll e (p:ps) =
+            bindPattern e p ty >>= \e' -> bindAll e' ps
+    in bindAll env pats
+bindPattern _   (PatternList _) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env (PatternCons patH patT) (TypeList ty) =
+    case bindPattern env patH ty of
+        InferErr err -> InferErr err
+        InferOk env' ->
+            bindPattern env' patT (TypeList ty)
+bindPattern _   (PatternCons _ _) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env PatternFalse TypeBool =
+    InferOk env
+bindPattern _   PatternFalse ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env PatternTrue TypeBool =
+    InferOk env
+bindPattern _   PatternTrue ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env PatternUnit TypeUnit =
+    InferOk env
+bindPattern _   PatternUnit ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+-- Надеюсь что парсер сделал за меня грязную работу и с остальными литерала не взлетит
+bindPattern env (PatternInt n) TypeNat =
+    InferOk env
+bindPattern _   (PatternInt n) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env (PatternSucc n) TypeNat =
+    bindPattern env n TypeNat
+bindPattern _   (PatternSucc n) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env (PatternVar ident) t =
+    InferOk (env ++ [(ident, t)])
+
+-- ====== HELPERS ======
 
 data VariantFieldLookupStatus
     = VariantFieldExistSomeType Type
