@@ -725,6 +725,10 @@ checkMatchCases env cases (TypeSum t1 t2) tyC =
 checkMatchCases env cases (TypeVariant fields) tyC =
     checkMatchCasesVariant env cases (TypeVariant fields) tyC
 
+-- TypeTuple
+checkMatchCases env cases (TypeTuple tys) tyC =
+    checkMatchCasesTuple env cases (TypeTuple tys) tyC
+
 -- Others
 checkMatchCases _ cases _ _ =
     CheckErr (C_ERROR_EXPR_NOT_IMPLEMENTED_YET_I cases)
@@ -778,6 +782,27 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
                             VariantFieldMissing ->
                                 CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
             _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
+
+checkMatchCasesTuple :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesTuple env cases (TypeTuple tys) tyC =
+    go cases tys
+  where
+    go [] _ = CheckOk
+    go (AMatchCase pat expr : rest) tys =
+        case pat of
+            PatternTuple pats ->
+                let bindAll e [] [] = InferOk e
+                    bindAll e (p:ps) (t:ts) =
+                        bindPattern e p t >>= \e' -> bindAll e' ps ts
+                    bindAll _ _ _ = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
+                in case bindAll env pats tys of
+                     InferErr err -> CheckErr err
+                     InferOk env' -> exprCheck env' expr tyC >>> go rest tys
+            _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
+
+-- • PatternRecord, ALabelledPattern
+-- • PatternList, PatternCons
+-- • PatternInt, PatternSucc
 
 -- (-) PatternCastAs Pattern Type
 -- (-) PatternAsc Pattern Type
@@ -842,6 +867,18 @@ bindPattern env (PatternVariant ident patData) (TypeVariant fields) =
                     InferErr ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
                 VariantFieldMissing ->
                     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
+bindPattern _   (PatternVariant ident patData) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
+bindPattern env (PatternTuple pats) (TypeTuple tys) =
+    let bindAll e [] [] = InferOk e
+        bindAll e (p:ps) (t:ts) =
+            bindPattern e p t >>= \e' -> bindAll e' ps ts
+        bindAll _ _ _ = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
+    in bindAll env pats tys
+bindPattern _   (PatternVariant ident patData) ty =
+    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+
 
 -- временный fallback: все остальные паттерны пока не поддерживаем
 bindPattern _ pat ty =
