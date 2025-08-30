@@ -1,6 +1,6 @@
 // sample program in Stella Core
 language core;
-extend with #tuples;
+extend with #records;
 
 fn Bool::not(b : Bool) -> Bool {
     return
@@ -13,7 +13,9 @@ fn twice(f : fn(Bool) -> Bool) -> (fn(Bool) -> Bool) {
     }
 }
 
-fn main(b : Nat) -> Bool {
+fn main(b : Nat) -> Nat {
     return 
-        {true, b}.1
+        {a = true, c = b}.c
 }
+
+//SUCCESS

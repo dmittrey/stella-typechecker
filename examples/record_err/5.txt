@@ -8,3 +8,5 @@ fn make() -> {x : Nat} {
 fn main(a : Nat) -> Nat {
   return a
 }
+
+//ERROR_UNEXPECTED_RECORD_FIELDS

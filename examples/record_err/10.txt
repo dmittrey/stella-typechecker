@@ -8,3 +8,5 @@ fn make() -> {x : Nat, y : Nat, z : Nat} {
 fn main(a : Nat) -> Nat {
   return a
 }
+
+//ERROR_MISSING_RECORD_FIELDS

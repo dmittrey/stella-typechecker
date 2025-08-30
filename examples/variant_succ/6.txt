@@ -12,3 +12,5 @@ fn main(flag : Bool) -> Nat {
     | <| no = unit |> => 0
   }
 }
+
+// SUCCESS

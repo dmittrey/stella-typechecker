@@ -6,3 +6,5 @@ fn main(_ : Nat) -> [Nat] {
   return let xs = [0, 1, succ(1)] in
   xs
 }
+
+//SUCCESS

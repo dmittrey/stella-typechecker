@@ -6,3 +6,5 @@ fn main(n : Nat) -> Nat
 {
     return Nat::pred(if Nat::iszero(0) then 0 else succ(0))
 }
+
+//SUCCESS

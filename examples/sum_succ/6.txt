@@ -11,3 +11,5 @@ fn main(n : Nat) -> Nat {
       | inr(x) => succ(x)
     }
 }
+
+//SUCCESS

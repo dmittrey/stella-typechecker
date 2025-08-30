@@ -9,3 +9,5 @@ fn main(input : Nat + (Bool + (fn(Nat) -> Nat))) -> Nat {
       | inr(inr(f)) => f(0)
     }
 }
+
+//SUCCESS

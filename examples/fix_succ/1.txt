@@ -6,3 +6,5 @@ fn idnat(n : Nat) -> Nat { return n }      // helper
 fn main(_ : Nat) -> Nat {
   return fix (idnat)
 }
+
+//SUCCESS

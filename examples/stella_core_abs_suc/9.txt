@@ -7,3 +7,5 @@ fn apply(f : fn(Nat) -> Nat, n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return apply(fn(x : Nat) { return succ(x) }, n)
 }
+
+//SUCCESS

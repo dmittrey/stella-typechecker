@@ -7,3 +7,5 @@ fn step_or_zero(n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return step_or_zero(n)
 }
+
+//SUCCESS

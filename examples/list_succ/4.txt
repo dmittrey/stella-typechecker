@@ -6,3 +6,5 @@ fn main(_ : Nat) -> [Bool] {
   return let ys = cons(true, []) as [Bool] in
   ys
 }
+
+//SUCCESS

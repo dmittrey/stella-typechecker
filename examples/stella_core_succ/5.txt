@@ -7,3 +7,5 @@ fn inc_if_zero(n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return inc_if_zero(n)
 }
+
+//SUCCESS

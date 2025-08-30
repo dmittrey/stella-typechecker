@@ -9,3 +9,8 @@ fn main(n : Nat) -> Nat {
   return let r = make(n) in
   r.f(r.base)
 }
+
+//SUCCESS
+
+
+//SUCCESS

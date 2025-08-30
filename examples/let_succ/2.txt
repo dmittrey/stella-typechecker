@@ -22,3 +22,5 @@ fn Nat::average(n : Nat) -> fn(Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return Nat::average(n)(n)
 }
+
+//SUCCESS

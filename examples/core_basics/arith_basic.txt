@@ -3,3 +3,5 @@ fn main (n : Nat) -> Nat
 {
   return succ (succ (5))
 }
+
+//SUCCESS

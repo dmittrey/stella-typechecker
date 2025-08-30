@@ -12,3 +12,5 @@ fn eval(input : Nat + Bool) -> Nat {
 fn main(n : Nat) -> Nat {
     return eval(inr(false))
 }
+
+//SUCCESS

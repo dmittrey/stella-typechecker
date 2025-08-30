@@ -8,3 +8,5 @@ fn pair(n : Nat) -> {val : Nat, next : Nat} {
 fn main(_ : Nat) -> Nat {
   return pair(10).next
 }
+
+//SUCCESS

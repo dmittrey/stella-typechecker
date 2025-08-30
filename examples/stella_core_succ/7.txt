@@ -7,3 +7,5 @@ fn normalize(n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return normalize(n)
 }
+
+//SUCCESS

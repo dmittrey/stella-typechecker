@@ -10,3 +10,5 @@ fn main(flag : Bool) -> Nat {
       <| lst = xs |> => List::head(xs)
   }
 }
+
+// SUCCESS

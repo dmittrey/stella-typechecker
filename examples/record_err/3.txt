@@ -5,3 +5,5 @@ fn main(_ : Nat) -> Nat {
   return let r = {x = 1, y = 2}  // Ошибка: запись проверяется с типом Nat
   in r as Nat
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

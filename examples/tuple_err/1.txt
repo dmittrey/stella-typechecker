@@ -6,9 +6,11 @@ fn noop(_ : {}) -> {} {
 }
 
 fn third(tup : {Nat, Nat, Nat}) -> Nat {
-  return unit.4
+  return tup.3
 }
 
 fn main(n : Nat) -> Nat {
   return third({n, succ(n), succ(succ(n))})
 }
+
+//SUCCESS

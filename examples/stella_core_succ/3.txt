@@ -7,3 +7,5 @@ fn previous(n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return previous(n)
 }
+
+//SUCCESS

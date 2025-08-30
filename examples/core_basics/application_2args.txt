@@ -16,3 +16,5 @@ fn twice(f : fn(Bool) -> Bool) -> (fn(Bool) -> Bool) {
 fn main(b : Bool) -> Bool {
     return twice(Bool::not)(b)
 }
+
+//SUCCESS

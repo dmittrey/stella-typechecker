@@ -3,3 +3,5 @@ language core;
 fn main(_ : Nat) -> fn(Nat) -> Nat {
   return fn(x : Nat) { return Nat::pred(x) }
 }
+
+//SUCCESS

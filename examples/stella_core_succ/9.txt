@@ -7,3 +7,5 @@ fn was_one(n : Nat) -> Bool {
 fn main(n : Nat) -> Bool {
   return was_one(n)
 }
+
+//SUCCESS

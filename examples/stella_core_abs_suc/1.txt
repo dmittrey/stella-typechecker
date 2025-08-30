@@ -7,3 +7,5 @@ fn twice(f : fn(Bool) -> Bool) -> (fn(Bool) -> Bool) {
 fn main(_ : Nat) -> Nat {
   return 0
 }
+
+//SUCCESS

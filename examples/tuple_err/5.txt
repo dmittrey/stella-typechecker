@@ -8,3 +8,5 @@ fn noop(_ : {}) -> {} {
 fn main(n : Nat) -> Nat {
   return {n, succ(n), succ(succ(n))} as Nat
 }
+
+// ERROR_UNEXPECTED_TUPLE

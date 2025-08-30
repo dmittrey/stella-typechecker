@@ -4,5 +4,7 @@ extend with #variants,#type-ascriptions,#let-bindings,#arithmetic-operators,#lis
 
 fn main(_ : Nat) -> [Nat] {
   return let xs = [] in   // нельзя вывести тип элементов
-  xs //ERROR_AMBIGUOUS_LIST_TYPE
+  xs
 }
+
+//ERROR_AMBIGUOUS_LIST

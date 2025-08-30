@@ -8,3 +8,5 @@ fn ignore(_ : Nat) -> Unit {
 fn main(_ : Nat) -> Unit {
   return unit
 }
+
+// SUCCESS

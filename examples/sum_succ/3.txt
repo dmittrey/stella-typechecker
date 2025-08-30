@@ -11,3 +11,5 @@ fn main(_ : Nat) -> Nat {
       | inr(_) => 0
     }
 }
+
+//SUCCESS

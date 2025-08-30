@@ -6,9 +6,11 @@ fn noop(_ : {}) -> {} {
 }
 
 fn third(tup : {Nat, Nat, Nat}) -> Nat {
-  return tup.3
+  return tup.0
 }
 
 fn main(n : Nat) -> Nat {
   return third({n, succ(n), succ(succ(n))})
 }
+
+// ERROR_TUPLE_INDEX_OUT_OF_BOUNDS

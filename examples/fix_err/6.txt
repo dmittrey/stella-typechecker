@@ -5,3 +5,5 @@ extend with #variants,#arithmetic-operators,#lists,#unit-type,#natural-literals,
 fn main(_ : Nat) -> Nat {
   return fix (fn (b : Bool) { return 0 })
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_PARAMETER

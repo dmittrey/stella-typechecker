@@ -7,3 +7,5 @@ fn dec_or_one(n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return dec_or_one(n)
 }
+
+//SUCCESS

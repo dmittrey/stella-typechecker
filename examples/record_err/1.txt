@@ -4,3 +4,5 @@ extend with #records;
 fn main(_ : Nat) -> Nat {
   return 0.current  // Ошибка: 0 ERROR_NOT_A_RECORD
 }
+
+//ERROR_NOT_A_RECORD

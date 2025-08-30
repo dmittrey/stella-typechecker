@@ -5,3 +5,5 @@ extend with #variants, #lists,#unit-type,#natural-literals,#structural-patterns,
 fn main(_ : Nat) -> Nat {
   return fix (true)
 }
+
+//ERROR_NOT_A_FUNCTION

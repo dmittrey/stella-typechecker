@@ -3,5 +3,7 @@ extend with #variants,#type-ascriptions,#let-bindings,#arithmetic-operators,#lis
 
 
 fn main(_ : Nat) -> [Nat] {
-  return let xs = [] in xs //ERROR_AMBIGUOUS_LIST_TYPE
+  return let xs = [] in xs
 }
+
+//ERROR_AMBIGUOUS_LIST

@@ -6,5 +6,7 @@ fn make(n : Nat) -> {x : Nat} {
 }
 
 fn main(n : Nat) -> Nat {
-  return make(n).y  // Ошибка: ERROR_UNEXPECTED_FIELD_ACCESS
+  return make(n).y
 }
+
+//ERROR_UNEXPECTED_FIELD_ACCESS

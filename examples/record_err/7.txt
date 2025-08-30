@@ -8,3 +8,5 @@ fn make() -> {x : Nat, x : Nat} {  // Ошибка: дублирование и�
 fn main(a : Nat) -> Nat {
   return a
 }
+
+//ERROR_DUPLICATE_RECORD_TYPE_FIELDS

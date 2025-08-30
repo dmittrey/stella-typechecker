@@ -11,3 +11,5 @@ fn main(_ : Bool) -> Nat {
       | inr(_) => 0
     }
 }
+
+//SUCCESS

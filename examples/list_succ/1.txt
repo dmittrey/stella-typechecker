@@ -5,3 +5,5 @@ extend with #variants,#type-ascriptions,#let-bindings,#arithmetic-operators,#lis
 fn main(_ : Nat) -> [Nat] {
   return let xs = [] as [Nat] in xs
 }
+
+//SUCCESS

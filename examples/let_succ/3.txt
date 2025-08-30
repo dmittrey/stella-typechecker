@@ -28,3 +28,6 @@ fn main(_ : Nat) -> Bool {
          let two = succ(one) in
            isRightTriangle(one)(one)(two)
 }
+
+
+//SUCCESS

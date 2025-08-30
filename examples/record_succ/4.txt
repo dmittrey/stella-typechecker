@@ -8,3 +8,5 @@ fn sum(p : {a : Nat, b : Nat}) -> Nat {
 fn main(_ : Nat) -> Nat {
   return sum({a = 10, b = 32})
 }
+
+//SUCCESS

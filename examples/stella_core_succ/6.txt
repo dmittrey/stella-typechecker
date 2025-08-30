@@ -7,3 +7,5 @@ fn flip(b : Bool) -> Bool {
 fn main(b : Bool) -> Bool {
   return flip(b)
 }
+
+//SUCCESS

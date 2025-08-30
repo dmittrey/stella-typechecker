@@ -8,3 +8,5 @@ fn unwrap(r : {a : {b : Nat}}) -> Nat {
 fn main(_ : Nat) -> Nat {
   return unwrap({a = {b = 42}})
 }
+
+//SUCCESS

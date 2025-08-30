@@ -8,3 +8,5 @@ fn make(p : Nat) -> {a : {b : Nat}} {
 fn main(p : Nat) -> Nat {
   return make(p).a.c  // Ошибка: поля c нет в {b : Nat}
 }
+
+//ERROR_UNEXPECTED_FIELD_ACCESS

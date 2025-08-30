@@ -7,3 +7,5 @@ fn is_zero(n : Nat) -> Bool {
 fn main(n : Nat) -> Bool {
   return is_zero(n)
 }
+
+//SUCCESS

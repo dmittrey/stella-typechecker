@@ -4,3 +4,5 @@ extend with #variants, #lists,#unit-type,#natural-literals,#structural-patterns,
 fn main(_ : Nat) -> Nat {
   return fix (fn (n : Nat) { return succ(n) })
 }
+
+//SUCCESS

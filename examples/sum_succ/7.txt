@@ -4,3 +4,5 @@ extend with #sum-types;
 fn main(n : Nat) -> Bool + (Bool + Bool) {
     return inr(inl(true))
 }
+
+//SUCCESS

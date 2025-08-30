@@ -8,3 +8,5 @@ fn main(n : Nat) -> Nat {
       | inr(f) => f(0)
     }
 }
+
+//SUCCESS

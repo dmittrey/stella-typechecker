@@ -4,5 +4,7 @@ extend with #variants,#type-ascriptions,#let-bindings,#arithmetic-operators,#lis
 
 fn main(_ : Nat) -> [Nat] {
   return let xs = [[0], [true]] in   // первый элемент : [Nat], второй : [Bool]
-  xs //ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+  xs
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

@@ -6,3 +6,5 @@ fn f(_ : Nat) -> Nat { return 0 }
 fn main(_ : Nat) -> Nat {
   return f.abc  // Ошибка: функция не запись
 }
+
+//ERROR_NOT_A_RECORD

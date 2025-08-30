@@ -8,3 +8,5 @@ fn increment_twice(n : Nat) -> Nat {
 fn main(r : Nat) -> Nat {
   return increment_twice(r)
 }
+
+//SUCCESS
