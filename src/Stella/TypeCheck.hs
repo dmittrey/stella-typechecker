@@ -17,9 +17,8 @@ data MissingMatchCase
     | MissingInl
   deriving (Eq, Ord, Show, Read)
 
--- #nullary-functions и #multiparameter-functions:
 -- #structural-patterns 
--- #nullary-variant-labels
+-- CI
 
 -- Типы ошибок
 data CErrType
@@ -62,6 +61,13 @@ data CErrType
     | ERROR_DUPLICATE_RECORD_FIELDS
     | ERROR_DUPLICATE_RECORD_TYPE_FIELDS
     | ERROR_DUPLICATE_VARIANT_TYPE_FIELDS Type
+    | ERROR_INCORRECT_ARITY_OF_MAIN
+    | ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
+    | ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA
+    | ERROR_UNEXPECTED_DATA_FOR_NULLARY_LABEL
+    | ERROR_MISSING_DATA_FOR_LABEL
+    | ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
+    | ERROR_UNEXPECTED_NULLARY_VARIANT_PATTERN
   deriving (Eq, Ord, Show, Read)
 
 -- Окружение: имя переменной → её тип
@@ -87,8 +93,8 @@ updateEnvByParams env params =
 
 checkArgs :: Env -> [Expr] -> [Type] -> CheckResult
 checkArgs _   []     []     = CheckOk
-checkArgs _   []     _      = CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S
-checkArgs _   _      []     = CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S
+checkArgs _   []     _      = CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
+checkArgs _   _      []     = CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
 checkArgs env (e:es) (ty:tys) =
   exprCheck env e ty
   >>> checkArgs env es tys
@@ -99,8 +105,8 @@ declCheck env (DeclFun _ name [] NoReturnType _ _ expr) =
 declCheck env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
     (exprCheck env expr retTy, env)
 
--- Core, #nested-function-declarations
-declCheck env (DeclFun anns name paramsAnn retTy throwTy decls expr) =
+-- Core, #nested-function-declarations, #nullary-functions
+declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throwTy decls expr) =
     let
         -- добавляем параметры в локальное окружение
         env' = updateEnvByParams env paramsAnn
@@ -115,8 +121,12 @@ declCheck env (DeclFun anns name paramsAnn retTy throwTy decls expr) =
         funTy    = TypeFun [t | AParamDecl _ t <- paramsAnn] resultTy
 
         resBody  = exprCheck envInner expr resultTy
+
+        isMainUnary = if funName == "main"
+            then if length paramsAnn /= 1 then CheckErr ERROR_INCORRECT_ARITY_OF_MAIN 
+            else CheckOk else CheckOk
         in
-        (resBody >>> resInner, env ++ [(name, funTy)])
+        (isMainUnary >>> resBody >>> resInner, env ++ [(funIdent, funTy)])
     where
         step :: (CheckResult, Env) -> Decl -> (CheckResult, Env)
         step (CheckOk, envAcc) d = declCheck envAcc d
@@ -189,8 +199,8 @@ exprCheck env (Abstraction params e) (TypeFun expParamTys retTy) =
   where
     checkParams :: Env -> [ParamDecl] -> [Type] -> (CheckResult, Env)
     checkParams env [] [] = (CheckOk, env)
-    checkParams env [] _  = (CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S, env)
-    checkParams env _  [] = (CheckErr ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S, env)
+    checkParams env [] _  = (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
+    checkParams env _  [] = (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
     checkParams env ((AParamDecl ident actualTy):ps) (ty:tys)
         | actualTy /= ty = (CheckErr (ERROR_UNEXPECTED_TYPE_FOR_PARAMETER ident ty actualTy), env)
         | otherwise =
@@ -340,12 +350,12 @@ exprCheck env (Variant ident exprData) (TypeVariant fields) =
             case lookupVariantField ident fields of
                 VariantFieldExistSomeType ty ->
                     case exprData of
-                        NoExprData -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S)
+                        NoExprData -> CheckErr (ERROR_MISSING_DATA_FOR_LABEL)
                         SomeExprData expr -> exprCheck env expr ty
                 VariantFieldExistNoType ->
                     case exprData of
                         NoExprData -> CheckOk
-                        SomeExprData expr -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S)
+                        SomeExprData expr -> CheckErr (ERROR_UNEXPECTED_DATA_FOR_NULLARY_LABEL)
                 VariantFieldMissing -> CheckErr (ERROR_UNEXPECTED_VARIANT_LABEL ident)
 
 exprCheck _ expr@(Variant _ _) _ = CheckErr (ERROR_UNEXPECTED_VARIANT expr)
@@ -750,15 +760,21 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
         case pat of
             PatternVariant ident patData ->
                 case patData of
-                    NoPatternData       -> exprCheck env expr tyC
+                    NoPatternData       ->
+                        case lookupVariantField ident fields of
+                            VariantFieldExistSomeType ty ->
+                                CheckErr ERROR_UNEXPECTED_NULLARY_VARIANT_PATTERN
+                            VariantFieldExistNoType ->
+                                exprCheck env expr tyC >>> go rest (Map.insert ident True seenMap)
+                            VariantFieldMissing ->
+                                CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
                     SomePatternData pat ->
                         case lookupVariantField ident fields of
                             VariantFieldExistSomeType ty ->
                                 let res = bindPattern env pat ty >>= \env' -> exprCheck env' expr tyC
                                 in res >>> go rest (Map.insert ident True seenMap)
                             VariantFieldExistNoType ->
-                                let res = exprCheck env expr tyC
-                                in res >>> go rest (Map.insert ident True seenMap)
+                                CheckErr ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
                             VariantFieldMissing ->
                                 CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
             _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
@@ -810,13 +826,20 @@ bindPattern _   PatternUnit ty =
 
 bindPattern env (PatternVariant ident patData) (TypeVariant fields) =
     case patData of
-        NoPatternData       -> InferOk env
+        NoPatternData       ->
+            case lookupVariantField ident fields of
+                VariantFieldExistSomeType ty ->
+                    InferErr ERROR_UNEXPECTED_NULLARY_VARIANT_PATTERN
+                VariantFieldExistNoType ->
+                    InferOk env
+                VariantFieldMissing ->
+                    InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
         SomePatternData pat ->
             case lookupVariantField ident fields of
                 VariantFieldExistSomeType ty ->
                     bindPattern env pat ty
                 VariantFieldExistNoType ->
-                    InferOk env
+                    InferErr ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
                 VariantFieldMissing ->
                     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
 
