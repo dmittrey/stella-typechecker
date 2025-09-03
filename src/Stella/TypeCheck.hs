@@ -17,7 +17,17 @@ data MissingMatchCase
     | MissingInl
   deriving (Eq, Ord, Show, Read)
 
--- #structural-patterns 
+-- 5. длярасширения #exceptions и #exception-type-annotation : DeclExceptionType, Throw, TryWith, TryCatch
+-- 6. для расширения #structural-subtyping: нет новых конструкций (но требуется проверка на- личия расширения);
+-- 7. для расширения #ambiguous-type-as-bottom: нет новых конструкций (но требуется проверка наличия расширения);
+
+-- ERROR_EXCEPTION_TYPE_NOT_DECLARED — в программе используются исключения, но не объявлен их тип;
+-- ERROR_AMBIGUOUS_THROW_TYPE — неоднозначный тип throw-выражения (Throw);
+
+-- ERROR_UNEXPECTED_SUBTYPE — тип выражения не является подтипом ожидаемого; эта ошибка должна возникать только если ни одна из более точных ошибок (выше) не возникла раньше.
+
+-- Перейти на do-нотацию
+
 -- CI
 
 -- Типы ошибок
@@ -31,7 +41,6 @@ data CErrType
 
     | ERROR_MISSING_MAIN
     | ERROR_UNDEFINED_VARIABLE StellaIdent
-    | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION_S
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
     | ERROR_NOT_A_FUNCTION Expr
     | ERROR_NOT_A_TUPLE Expr
@@ -67,7 +76,16 @@ data CErrType
     | ERROR_MISSING_DATA_FOR_LABEL
     | ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
     | ERROR_UNEXPECTED_NULLARY_VARIANT_PATTERN
+    | ERROR_NOT_A_REFERENCE Expr
+    | ERROR_UNEXPECTED_MEMORY_ADDRESS String
+    | ERROR_AMBIGUOUS_REFERENCE_TYPE
+    | ERROR_AMBIGUOUS_PANIC_TYPE
   deriving (Eq, Ord, Show, Read)
+
+-- Контекст типов ошибок
+data ExnCtx 
+    = ExnTypeNotDeclared
+    | ExnTypeDecl Type
 
 -- Окружение: имя переменной → её тип
 type Env = [(StellaIdent, Type)]
@@ -98,14 +116,14 @@ checkArgs env (e:es) (ty:tys) =
   exprCheck env e ty
   >>> checkArgs env es tys
 
-declCheck :: Env -> Decl -> (CheckResult, Env)
-declCheck env (DeclFun _ name [] NoReturnType _ _ expr) =
+declCheck :: ExnCtx -> Env -> Decl -> (CheckResult, Env)
+declCheck _ env (DeclFun _ name [] NoReturnType _ _ expr) =
     (exprCheck env expr TypeUnit, env)
-declCheck env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
+declCheck _ env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
     (exprCheck env expr retTy, env)
 
 -- Core, #nested-function-declarations, #nullary-functions
-declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throwTy decls expr) =
+declCheck exnCtx env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throwTy decls expr) =
     let
         resultTy = case retTy of
                     NoReturnType      -> TypeUnit
@@ -134,10 +152,12 @@ declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throw
     in
         (isMainUnary >>> resBody >>> resInner, envWithFun)
   where
-    step (CheckOk, envAcc) d = declCheck envAcc d
+    step (CheckOk, envAcc) d = declCheck exnCtx envAcc d
     step (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
 
-declCheck e d = (CheckErr (ERROR_DECL_CHECK_NOT_IMPLEMENTED d), e)
+declCheck _ e (DeclExceptionType _) = (CheckOk, e)
+
+declCheck _ e d = (CheckErr (ERROR_DECL_CHECK_NOT_IMPLEMENTED d), e)
 
 exprCheck :: Env -> Expr -> Type -> CheckResult
 
@@ -451,20 +471,67 @@ exprCheck _ (ConstInt n) TypeNat = CheckOk -- #natural-literals
 exprCheck _ (ConstInt n) t =
     CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstInt n) TypeNat t)
 
--- ====== Other ======
-
--- T-Add
+-- ====== T-Add ======
 exprCheck env (Add e1 e2) TypeNat = 
     exprCheck env e1 TypeNat
     >>> exprCheck env e2 TypeNat
 
--- T-Equal
+-- ====== T-Equal ======
 exprCheck env (Equal e1 e2) t =
     case exprInfer env e1 of
         InferOk ty1 ->
             exprCheck env e2 ty1
         InferErr err ->
             CheckErr err
+
+-- ====== T-Ref ======
+exprCheck env (Ref e) (TypeRef ty) =
+    exprCheck env e ty
+
+exprCheck _ e@(Ref _) t =
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e (TypeRef t) t)
+
+-- ====== T-Deref ======
+exprCheck env (Deref e) t =
+    case exprInfer env e of
+        InferOk (TypeRef ty) ->
+            if t == ty
+                then CheckOk
+                else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e (TypeRef t) (TypeRef ty))
+        InferOk _ ->
+            CheckErr (ERROR_NOT_A_REFERENCE e)
+        InferErr err ->
+            CheckErr err
+
+-- ====== T-Assign ======
+exprCheck env (Assign el er) TypeUnit =
+    case exprInfer env el of
+        InferOk (TypeRef ty) ->
+            exprCheck env er ty
+        InferOk _ ->
+            CheckErr (ERROR_NOT_A_REFERENCE el)
+        InferErr err ->
+            CheckErr err
+
+exprCheck _ e@(Assign _ _) t =
+    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e TypeUnit t)
+
+-- ====== T-Memory ======
+exprCheck env (ConstMemory (MemoryAddress adrStr)) (TypeRef _) =
+    CheckOk
+
+exprCheck env (ConstMemory (MemoryAddress adrStr)) ty =
+    CheckErr (ERROR_UNEXPECTED_MEMORY_ADDRESS adrStr)
+
+-- ====== T-Error ======
+exprCheck env Panic t =
+    CheckOk
+
+-- ====== T-Throw ======
+-- exprCheck env (Throw t1) t =
+    -- exprCheck t1 
+
+-- Other
 
 exprCheck _ e t = CheckErr (ERROR_EXPR_CHECK_NOT_IMPLEMENTED e t)
 
@@ -735,6 +802,41 @@ exprInfer env (Fix expr) =
 
 -- ====== T-Natural ======
 exprInfer _ (ConstInt n) = InferOk TypeNat -- #natural-literals
+
+-- ====== T-Ref ======
+exprInfer env (Ref e) =
+    case exprInfer env e of
+        InferOk ty ->
+            InferOk (TypeRef ty)
+        InferErr err ->
+            InferErr err
+
+-- ====== T-Deref ======
+exprInfer env (Deref e) =
+    case exprInfer env e of
+        InferOk (TypeRef ty) -> InferOk ty
+        InferOk ty           -> InferErr (ERROR_NOT_A_REFERENCE e)
+        InferErr err         -> InferErr err
+
+-- ====== T-Assign ======
+exprInfer env (Assign el er) =
+    case exprInfer env el of
+        InferOk (TypeRef ty) ->
+            case exprCheck env er ty of
+                CheckOk      -> InferOk TypeUnit
+                CheckErr err -> InferErr err
+        InferOk _ ->
+            InferErr (ERROR_NOT_A_REFERENCE el)
+        InferErr err ->
+            InferErr err
+
+-- ====== T-Memory ======
+exprInfer env (ConstMemory (MemoryAddress adrStr)) =
+    InferErr (ERROR_AMBIGUOUS_REFERENCE_TYPE)
+
+-- ====== T-Error ======
+exprInfer env Panic =
+    InferErr ERROR_AMBIGUOUS_PANIC_TYPE
 
 -- Other
 
