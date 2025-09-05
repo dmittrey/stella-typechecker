@@ -17,12 +17,8 @@ data MissingMatchCase
     | MissingInl
   deriving (Eq, Ord, Show, Read)
 
--- 5. длярасширения #exceptions и #exception-type-annotation : DeclExceptionType, Throw, TryWith, TryCatch
 -- 6. для расширения #structural-subtyping: нет новых конструкций (но требуется проверка на- личия расширения);
 -- 7. для расширения #ambiguous-type-as-bottom: нет новых конструкций (но требуется проверка наличия расширения);
-
--- ERROR_EXCEPTION_TYPE_NOT_DECLARED — в программе используются исключения, но не объявлен их тип;
--- ERROR_AMBIGUOUS_THROW_TYPE — неоднозначный тип throw-выражения (Throw);
 
 -- ERROR_UNEXPECTED_SUBTYPE — тип выражения не является подтипом ожидаемого; эта ошибка должна возникать только если ни одна из более точных ошибок (выше) не возникла раньше.
 
@@ -49,7 +45,7 @@ data CErrType
     | ERROR_UNEXPECTED_TYPE_FOR_PARAMETER StellaIdent Type Type -- Ident Expected Got
     | ERROR_UNEXPECTED_TUPLE Expr Type
     | ERROR_UNEXPECTED_RECORD Expr Type
-    | ERROR_UNEXPECTED_VARIANT Expr
+    | ERROR_UNEXPECTED_VARIANT
     | ERROR_UNEXPECTED_LIST Expr
     | ERROR_UNEXPECTED_INJECTION Expr
     | ERROR_MISSING_RECORD_FIELDS
@@ -80,15 +76,27 @@ data CErrType
     | ERROR_UNEXPECTED_MEMORY_ADDRESS String
     | ERROR_AMBIGUOUS_REFERENCE_TYPE
     | ERROR_AMBIGUOUS_PANIC_TYPE
+    | ERROR_EXCEPTION_TYPE_NOT_DECLARED Expr
+    | ERROR_AMBIGUOUS_THROW_TYPE
+    | DEBUGGG Expr Pattern Expr
   deriving (Eq, Ord, Show, Read)
 
 -- Контекст типов ошибок
 data ExnCtx 
     = ExnTypeNotDeclared
     | ExnTypeDecl Type
+    | ExnOpenVariant [VariantFieldType]
+  deriving (Show, Eq)
 
--- Окружение: имя переменной → её тип
-type Env = [(StellaIdent, Type)]
+-- Окружение: имя переменной → её тип + общий контекст ошибок
+data Env = Env
+    { envVars :: [(StellaIdent, Type)]
+    , envExn  :: ExnCtx
+    }
+    deriving (Show, Eq)
+
+emptyEnv :: Env
+emptyEnv = Env { envVars = [], envExn = ExnTypeNotDeclared }
 
 -- Результат проверки против типа
 type CheckResult = Either CErrType ()
@@ -106,7 +114,7 @@ CheckErr err >>> _ = CheckErr err
 
 updateEnvByParams :: Env -> [ParamDecl] -> Env
 updateEnvByParams env params =
-    env ++ [(ident, t) | AParamDecl ident t <- params]
+    env { envVars = envVars env ++ [(ident, t) | AParamDecl ident t <- params] }
 
 checkArgs :: Env -> [Expr] -> [Type] -> CheckResult
 checkArgs _   []     []     = CheckOk
@@ -116,14 +124,14 @@ checkArgs env (e:es) (ty:tys) =
   exprCheck env e ty
   >>> checkArgs env es tys
 
-declCheck :: ExnCtx -> Env -> Decl -> (CheckResult, Env)
-declCheck _ env (DeclFun _ name [] NoReturnType _ _ expr) =
+declCheck :: Env -> Decl -> (CheckResult, Env)
+declCheck env (DeclFun _ name [] NoReturnType _ _ expr) =
     (exprCheck env expr TypeUnit, env)
-declCheck _ env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
+declCheck env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
     (exprCheck env expr retTy, env)
 
 -- Core, #nested-function-declarations, #nullary-functions
-declCheck exnCtx env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throwTy decls expr) =
+declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throwTy decls expr) =
     let
         resultTy = case retTy of
                     NoReturnType      -> TypeUnit
@@ -132,7 +140,7 @@ declCheck exnCtx env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retT
         funTy    = TypeFun [t | AParamDecl _ t <- paramsAnn] resultTy
 
         -- Функция должна быть доступна самой себе (для рекурсии)
-        envWithFun = env ++ [(funIdent, funTy)]
+        envWithFun = env { envVars = (funIdent, funTy) : envVars env }
 
         -- добавляем параметры в локальное окружение
         env' = updateEnvByParams envWithFun paramsAnn
@@ -152,12 +160,13 @@ declCheck exnCtx env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retT
     in
         (isMainUnary >>> resBody >>> resInner, envWithFun)
   where
-    step (CheckOk, envAcc) d = declCheck exnCtx envAcc d
+    step (CheckOk, envAcc) d = declCheck envAcc d
     step (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
 
-declCheck _ e (DeclExceptionType _) = (CheckOk, e)
+declCheck e (DeclExceptionType _) = (CheckOk, e)
+declCheck e (DeclExceptionVariant _ _) = (CheckOk, e)
 
-declCheck _ e d = (CheckErr (ERROR_DECL_CHECK_NOT_IMPLEMENTED d), e)
+declCheck e d = (CheckErr (ERROR_DECL_CHECK_NOT_IMPLEMENTED d), e)
 
 exprCheck :: Env -> Expr -> Type -> CheckResult
 
@@ -211,7 +220,7 @@ exprCheck env (NatRec n z s) ty =
 
 -- ====== T-Var ======
 exprCheck env (Var ident) t =
-  case lookup ident env of
+  case lookup ident (envVars env) of
     Just ty | ty == t   -> CheckOk
             | otherwise -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Var ident) ty t)
     Nothing             -> CheckErr (ERROR_UNDEFINED_VARIABLE ident)
@@ -225,11 +234,16 @@ exprCheck env (Abstraction params e) (TypeFun expParamTys retTy) =
     checkParams :: Env -> [ParamDecl] -> [Type] -> (CheckResult, Env)
     checkParams env [] [] = (CheckOk, env)
     checkParams env ((AParamDecl ident actualTy):ps) (ty:tys)
-        | length ps /= length tys = (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
-        | actualTy /= ty = (CheckErr (ERROR_UNEXPECTED_TYPE_FOR_PARAMETER ident ty actualTy), env)
+        | length ps /= length tys =
+            (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
+
+        | actualTy /= ty =
+            (CheckErr (ERROR_UNEXPECTED_TYPE_FOR_PARAMETER ident ty actualTy), env)
+
         | otherwise =
             let (res, env') = checkParams env ps tys
-            in (res, env' ++ [(ident, actualTy)])
+            in (res, env' { envVars = (ident, actualTy) : envVars env' })
+
 
 -- Check type with non TypeFun (ERROR_UNEXPECTED_LAMBDA)
 exprCheck env expression@(Abstraction ((AParamDecl paramIdent paramGotTy) : params) e) t =
@@ -291,14 +305,13 @@ exprCheck env (LetRec bindings body) tyC =
     step (InferOk envAcc) (APatternBinding pat e) =
         case pat of
             PatternAsc p@(PatternVar pIdent) tyAnn ->
-                case bindPattern (envAcc ++ [(pIdent, tyAnn)]) p tyAnn of
-                    InferOk env' -> 
+                case bindPattern (envAcc { envVars = (pIdent, tyAnn) : envVars envAcc }) p tyAnn of
+                    InferOk env' ->
                         case exprCheck env' e tyAnn of
-                            CheckOk -> InferOk env'
-                            CheckErr err -> InferErr err
-                    InferErr err -> InferErr err
+                            CheckOk     -> InferOk env'
+                            CheckErr er -> InferErr er
+                    InferErr er -> InferErr er
             _ -> InferErr (ERROR_PATTERN_TYPE_REQUIRED_FOR_LETREC pat)
-
     step (InferErr err) _ = InferErr err
 
 -- ====== T-Tuple ======
@@ -402,7 +415,7 @@ exprCheck env (Variant ident exprData) (TypeVariant fields) =
                         SomeExprData expr -> CheckErr (ERROR_UNEXPECTED_DATA_FOR_NULLARY_LABEL)
                 VariantFieldMissing -> CheckErr (ERROR_UNEXPECTED_VARIANT_LABEL ident)
 
-exprCheck _ expr@(Variant _ _) _ = CheckErr (ERROR_UNEXPECTED_VARIANT expr)
+exprCheck _ expr@(Variant _ _) _ = CheckErr ERROR_UNEXPECTED_VARIANT
 
 -- ====== T-Head ======
 exprCheck env (Head expr) ty =
@@ -527,9 +540,26 @@ exprCheck env (ConstMemory (MemoryAddress adrStr)) ty =
 exprCheck env Panic t =
     CheckOk
 
--- ====== T-Throw ======
--- exprCheck env (Throw t1) t =
-    -- exprCheck t1 
+-- ====== T-Exn ======
+exprCheck env (Throw t1) t =
+    case envExn env of
+        ExnTypeNotDeclared ->
+            CheckErr (ERROR_EXCEPTION_TYPE_NOT_DECLARED t1)
+        ExnTypeDecl ty ->
+            exprCheck env t1 ty
+        ExnOpenVariant tv ->
+            exprCheck env t1 (TypeVariant tv)
+
+-- ====== T-Try ======
+exprCheck env (TryCatch e1 pat e2) t =
+    exprCheck env e1 t
+    >>> case envExn env of
+        ExnTypeNotDeclared ->
+            CheckErr (ERROR_EXCEPTION_TYPE_NOT_DECLARED e1)
+        ExnTypeDecl ty ->
+            bindPattern env pat ty >>= \e' -> exprCheck e' e2 t
+        ExnOpenVariant tv ->
+            bindPattern env pat (TypeVariant tv) >>= \e' -> exprCheck e' e2 t
 
 -- Other
 
@@ -615,7 +645,7 @@ exprInfer env (NatRec n z s) =
 
 -- -- ====== T-Var ======
 exprInfer env (Var ident) =
-    case lookup ident env of
+    case lookup ident (envVars env) of
         Just t  -> InferOk t
         Nothing -> InferErr (ERROR_UNDEFINED_VARIABLE ident)
 
@@ -838,6 +868,34 @@ exprInfer env (ConstMemory (MemoryAddress adrStr)) =
 exprInfer env Panic =
     InferErr ERROR_AMBIGUOUS_PANIC_TYPE
 
+-- ====== T-Exn ======
+exprInfer env (Throw _) =
+    InferErr ERROR_AMBIGUOUS_THROW_TYPE
+
+-- ====== T-Try ======
+exprInfer env (TryCatch e1 pat e2) =
+    case exprInfer env e1 of
+        InferErr err ->
+            InferErr err
+        InferOk ty1 ->
+            case envExn env of
+                ExnTypeNotDeclared ->
+                    InferErr (ERROR_EXCEPTION_TYPE_NOT_DECLARED e1)
+                ExnTypeDecl ty ->
+                    bindPattern env pat ty >>= \e' -> 
+                        case exprCheck e' e2 ty1 of
+                            CheckErr err ->
+                                InferErr err
+                            CheckOk ->
+                                InferOk ty1
+                ExnOpenVariant tv ->
+                    bindPattern env pat (TypeVariant tv) >>= \e' -> 
+                        case exprCheck e' e2 ty1 of
+                            CheckErr err ->
+                                InferErr err
+                            CheckOk ->
+                                InferOk ty1
+
 -- Other
 
 exprInfer _ e = InferErr (ERROR_EXPR_INFER_NOT_IMPLEMENTED e)
@@ -1054,8 +1112,8 @@ checkMatchCasesBool env cases tyC =
         PatternFalse ->
           exprCheck env expr tyC >>> go rest seenTrue True
         PatternVar x ->
-          let env' = (x, TypeBool):env
-          in exprCheck env' expr tyC >>> go rest True True
+            let env' = env { envVars = (x, TypeBool) : envVars env }
+            in exprCheck env' expr tyC >>> go rest True True
         _ ->
           CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeBool)
 
@@ -1078,7 +1136,7 @@ checkMatchCasesNat env cases tyC =
             InferOk env' ->
               exprCheck env' expr tyC >>> go rest seenZero True
         PatternVar x ->
-          let env' = (x, TypeNat):env
+          let env' = env { envVars = (x, TypeUnit) : envVars env }
           in exprCheck env' expr tyC >>> go rest True True
         _ ->
           CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeNat)
@@ -1096,7 +1154,7 @@ checkMatchCasesUnit env cases tyC =
         PatternUnit ->
           exprCheck env expr tyC >>> go rest True
         PatternVar x ->
-          let env' = (x, TypeUnit):env
+          let env' = env { envVars = (x, TypeUnit) : envVars env }
           in exprCheck env' expr tyC >>> go rest True
         _ ->
           CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeUnit)
@@ -1219,7 +1277,7 @@ bindPattern _   (PatternSucc n) ty =
     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
 
 bindPattern env (PatternVar ident) t =
-    InferOk (env ++ [(ident, t)])
+    InferOk env { envVars = (ident, t) : envVars env }
 
 -- ====== HELPERS ======
 
