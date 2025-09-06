@@ -17,8 +17,14 @@ data MissingMatchCase
     | MissingInl
   deriving (Eq, Ord, Show, Read)
 
--- 6. для расширения #structural-subtyping: нет новых конструкций (но требуется проверка на- личия расширения);
--- 7. для расширения #ambiguous-type-as-bottom: нет новых конструкций (но требуется проверка наличия расширения);
+-- Привести в порядок bindPatterns и matchCases(оставить перебора вариантов Patterns, просто причесать)
+-- А это видимо все таки ответственность bindPattern
+
+-- Для Viariants в случае подтипирования надо вернуть как объявили
+-- Прогнать оставшиеся тесты
+
+
+-- 6. для расширения #structural-subtyping: нет новых конструкций (но требуется проверка наличия расширения);
 
 -- ERROR_UNEXPECTED_SUBTYPE — тип выражения не является подтипом ожидаемого; эта ошибка должна возникать только если ни одна из более точных ошибок (выше) не возникла раньше.
 
@@ -61,7 +67,6 @@ data CErrType
     | ERROR_ILLEGAL_EMPTY_MATCHING
     | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase]
     | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Type
-    | ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M Pattern Type
     | ERROR_DUPLICATE_RECORD_FIELDS
     | ERROR_DUPLICATE_RECORD_TYPE_FIELDS
     | ERROR_DUPLICATE_VARIANT_TYPE_FIELDS Type
@@ -78,7 +83,7 @@ data CErrType
     | ERROR_AMBIGUOUS_PANIC_TYPE
     | ERROR_EXCEPTION_TYPE_NOT_DECLARED Expr
     | ERROR_AMBIGUOUS_THROW_TYPE
-    | DEBUGGG Expr Pattern Expr
+    | DEBUG Pattern Type
   deriving (Eq, Ord, Show, Read)
 
 -- Контекст типов ошибок
@@ -92,11 +97,12 @@ data ExnCtx
 data Env = Env
     { envVars :: [(StellaIdent, Type)]
     , envExn  :: ExnCtx
+    , isAmbTyAsBot :: Bool
     }
     deriving (Show, Eq)
 
 emptyEnv :: Env
-emptyEnv = Env { envVars = [], envExn = ExnTypeNotDeclared }
+emptyEnv = Env { envVars = [], envExn = ExnTypeNotDeclared, isAmbTyAsBot = False }
 
 -- Результат проверки против типа
 type CheckResult = Either CErrType ()
@@ -749,13 +755,30 @@ exprInfer env (DotRecord expr ident) =
         InferErr err            -> InferErr err
 
 -- ====== T-Inl ======
-exprInfer env (Inl expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
+exprInfer env (Inl expr)
+    | isAmbTyAsBot env  =
+        case exprInfer env expr of
+            InferOk ty ->
+                InferOk (TypeSum ty TypeBottom)
+            InferErr err ->
+                InferErr err
+    | otherwise         = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 
 -- ====== T-Inr ======
-exprInfer env (Inr expr) = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
+exprInfer env (Inr expr)
+    | isAmbTyAsBot env  =
+        case exprInfer env expr of
+            InferOk ty ->
+                InferOk (TypeSum TypeBottom ty)
+            InferErr err ->
+                InferErr err
+    | otherwise         = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
 
 -- ====== T-Variant ======
-exprInfer env expr@(Variant ident exprData) = InferErr (ERROR_AMBIGUOUS_VARIANT_TYPE expr)
+    -- TODO Там надо добавить как есть, тк он потом по отношению подтипизации превратиться в другой
+exprInfer env expr@(Variant ident exprData)
+    | isAmbTyAsBot env  = InferOk TypeBottom
+    | otherwise         = InferErr (ERROR_AMBIGUOUS_VARIANT_TYPE expr)
 
 -- ====== T-Head ======
 exprInfer env (Head expr) =
@@ -788,8 +811,9 @@ exprInfer env (IsEmpty expr) =
             InferErr err
 
 -- ====== T-List ======
-exprInfer env (List []) =
-    InferErr ERROR_AMBIGUOUS_LIST
+exprInfer env (List [])
+    | isAmbTyAsBot env  = InferOk (TypeList TypeBottom)
+    | otherwise         = InferErr ERROR_AMBIGUOUS_LIST
 
 exprInfer env (List (e:es)) =
     case exprInfer env e of
@@ -861,16 +885,19 @@ exprInfer env (Assign el er) =
             InferErr err
 
 -- ====== T-Memory ======
-exprInfer env (ConstMemory (MemoryAddress adrStr)) =
-    InferErr (ERROR_AMBIGUOUS_REFERENCE_TYPE)
+exprInfer env (ConstMemory (MemoryAddress adrStr))
+    | isAmbTyAsBot env  = InferOk (TypeRef TypeBottom)
+    | otherwise         = InferErr ERROR_AMBIGUOUS_REFERENCE_TYPE
 
 -- ====== T-Error ======
-exprInfer env Panic =
-    InferErr ERROR_AMBIGUOUS_PANIC_TYPE
+exprInfer env Panic
+    | isAmbTyAsBot env  = InferOk TypeBottom
+    | otherwise         = InferErr ERROR_AMBIGUOUS_PANIC_TYPE
 
 -- ====== T-Exn ======
-exprInfer env (Throw _) =
-    InferErr ERROR_AMBIGUOUS_THROW_TYPE
+exprInfer env (Throw _)
+    | isAmbTyAsBot env  = InferOk TypeBottom
+    | otherwise         = InferErr ERROR_AMBIGUOUS_THROW_TYPE
 
 -- ====== T-Try ======
 exprInfer env (TryCatch e1 pat e2) =
@@ -914,10 +941,10 @@ exprInfer _ e = InferErr (ERROR_EXPR_INFER_NOT_IMPLEMENTED e)
 -- (+) TypeBool
 -- (+) TypeNat
 -- (+) TypeUnit
--- (-) TypeTop
--- (-) TypeBottom
--- (-) TypeRef Type
--- (-) TypeVar StellaIdent
+-- (+) TypeTop
+-- (+) TypeBottom
+-- (+) TypeRef Type
+-- (+) TypeVar StellaIdent
 checkMatchCases :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 
 -- TypeAuto
@@ -970,23 +997,23 @@ checkMatchCases env cases TypeUnit tyC =
 
 -- TypeTop
 checkMatchCases env cases TypeTop tyC =
-    CheckErr (ERROR_MATCH_NOT_SUPPORTED TypeTop)
+    checkMatchCasesTop env cases tyC
 
 -- TypeBottom
 checkMatchCases env cases TypeBottom tyC =
-    CheckErr (ERROR_MATCH_NOT_SUPPORTED TypeBottom)
+    checkMatchCasesBottom env cases tyC
 
 -- TypeRef
-checkMatchCases env cases t@(TypeRef ty) tyC =
-    CheckErr (ERROR_MATCH_NOT_SUPPORTED t)
+checkMatchCases env cases (TypeRef ty) tyC =
+    checkMatchCasesRef env cases (TypeRef ty) tyC
 
 -- TypeVar
-checkMatchCases env cases t@(TypeVar ident) tyC =
-    CheckErr (ERROR_MATCH_NOT_SUPPORTED t)
+checkMatchCases env cases (TypeVar ident) tyC =
+    checkMatchCasesVar env cases (TypeVar ident) tyC
 
-
+-- TODO Можно переделать всё на bindPattern
 checkMatchCasesSum :: Env -> [MatchCase] -> Type -> Type -> CheckResult
-checkMatchCasesSum env cases (TypeSum tl tr) tyC =
+checkMatchCasesSum env cases t@(TypeSum tl tr) tyC =
     go cases False False
   where
     go [] seenL seenR
@@ -1001,7 +1028,9 @@ checkMatchCasesSum env cases (TypeSum tl tr) tyC =
           PatternInr pr ->
               let res = bindPattern env pr tr >>= \envR -> exprCheck envR expr tyC
               in res >>> go rest seenL True
-          _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeSum tl tr))
+          _ ->
+              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
+              in res >>> go rest True True
 
 checkMatchCasesTuple :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesTuple env cases (TypeTuple tys) tyC =
@@ -1073,28 +1102,15 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
             _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
 
 checkMatchCasesList :: Env -> [MatchCase] -> Type -> Type -> CheckResult
-checkMatchCasesList env cases (TypeList ty) tyC =
+checkMatchCasesList env cases t@(TypeList ty) tyC =
     go cases
   where
     go :: [MatchCase] -> CheckResult
     go [] = CheckOk
     go (AMatchCase pat expr : rest) =
-        case pat of
-            PatternList pats ->
-                let bindAll e [] = InferOk e
-                    bindAll e (p:ps) =
-                        bindPattern e p ty >>= \e' -> bindAll e' ps
-                in case bindAll env pats of
-                     InferErr err -> CheckErr err
-                     InferOk env' -> exprCheck env' expr tyC >>> go rest
-            PatternCons patH patT ->
-                case bindPattern env patH ty of
-                    InferErr err -> CheckErr err
-                    InferOk env' ->
-                        case bindPattern env' patT (TypeList ty) of
-                            InferErr err -> CheckErr err
-                            InferOk env'' -> exprCheck env'' expr tyC >>> go rest
-            _ -> CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat (TypeList ty))
+        case bindPattern env pat t of
+            InferErr err -> CheckErr err
+            InferOk env' -> exprCheck env' expr tyC >>> go rest
 
 checkMatchCasesBool :: Env -> [MatchCase] -> Type -> CheckResult
 checkMatchCasesBool env cases tyC =
@@ -1115,7 +1131,7 @@ checkMatchCasesBool env cases tyC =
             let env' = env { envVars = (x, TypeBool) : envVars env }
             in exprCheck env' expr tyC >>> go rest True True
         _ ->
-          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeBool)
+          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE TypeBool)
 
 checkMatchCasesNat :: Env -> [MatchCase] -> Type -> CheckResult
 checkMatchCasesNat env cases tyC =
@@ -1139,7 +1155,7 @@ checkMatchCasesNat env cases tyC =
           let env' = env { envVars = (x, TypeUnit) : envVars env }
           in exprCheck env' expr tyC >>> go rest True True
         _ ->
-          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeNat)
+          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE TypeNat)
 
 checkMatchCasesUnit :: Env -> [MatchCase] -> Type -> CheckResult
 checkMatchCasesUnit env cases tyC =
@@ -1157,7 +1173,59 @@ checkMatchCasesUnit env cases tyC =
           let env' = env { envVars = (x, TypeUnit) : envVars env }
           in exprCheck env' expr tyC >>> go rest True
         _ ->
-          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE_M pat TypeUnit)
+          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE TypeUnit)
+
+checkMatchCasesTop :: Env -> [MatchCase] -> Type -> CheckResult
+checkMatchCasesTop env cases tyC =
+    go cases
+  where
+    go [] = CheckOk
+
+    go (AMatchCase pat expr : rest) =
+      case pat of
+        PatternVar x ->
+          let env' = env { envVars = (x, TypeTop) : envVars env }
+          in exprCheck env' expr tyC >>> go rest
+        _ ->
+          CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE TypeTop)
+
+checkMatchCasesBottom :: Env -> [MatchCase] -> Type -> CheckResult
+checkMatchCasesBottom env cases tyC =
+    go cases
+  where
+    go [] = CheckOk
+
+    go (AMatchCase pat expr : rest) =
+        case bindPattern env pat TypeBottom of
+            InferErr err -> CheckErr err
+            InferOk env' ->
+              exprCheck env' expr tyC >>> go rest
+
+checkMatchCasesRef :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesRef env cases (TypeRef ty) tyC =
+    go cases
+  where
+    go [] = CheckOk
+    go (AMatchCase pat expr : rest) =
+        case pat of
+          PatternVar v ->
+              bindPattern env pat (TypeRef ty) >>= \env' ->
+                  exprCheck env' expr tyC >>> go rest
+          _ ->
+              CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeRef ty))
+
+checkMatchCasesVar :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesVar env cases (TypeVar ident) tyC =
+    go cases
+  where
+    go [] = CheckOk
+    go (AMatchCase pat expr : rest) =
+        case lookup ident (envVars env) of
+            Just t  ->
+                bindPattern env pat t >>= \env' ->
+                  exprCheck env' expr tyC >>> go rest
+            Nothing ->
+                CheckErr (ERROR_UNDEFINED_VARIABLE ident)
 
 -- (-) PatternCastAs Pattern Type
 -- (-) PatternAsc Pattern Type
@@ -1296,3 +1364,28 @@ lookupVariantField ident fields =
             Just (SomeTyping t)     -> VariantFieldExistSomeType t
             Just (NoTyping)         -> VariantFieldExistNoType
             Nothing                 -> VariantFieldMissing
+
+-- Subsumption
+(<:) :: Type -> Type -> Bool
+TypeBottom      <: _                = True
+_               <: TypeTop          = True
+t1              <: t2               | t1 == t2 = True
+
+(TypeSum l1 r1) <: (TypeSum l2 r2)  =
+    l1 <: l2 && r1 <: r2
+
+(TypeTuple ts1) <: (TypeTuple ts2) =
+    length ts1 == length ts2 && and (zipWith (<:) ts1 ts2)
+
+(TypeList t1)   <: (TypeList t2) =
+    t1 <: t2
+
+(TypeRef t1)    <: (TypeRef t2) =
+    t1 <: t2
+
+(TypeFun args1 res1) <: (TypeFun args2 res2) =
+    length args1 == length args2
+    && and (zipWith (flip (<:)) args1 args2)
+    && res1 <: res2
+
+_ <: _ = False
