@@ -9,3 +9,6 @@ fn badReturn(n : Nat) -> (fn(Nat) -> Nat){
 fn main(n : Nat) -> Nat {
   return 0
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

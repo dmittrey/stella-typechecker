@@ -6,3 +6,6 @@ extend with #type-reconstruction, #lists;
 fn main(arg : Nat) -> auto {
   return List::isempty(arg)
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

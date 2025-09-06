@@ -7,3 +7,6 @@ exception type = Nat
 fn main(n : Nat) -> Nat {
   return throw(true)
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

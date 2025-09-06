@@ -5,3 +5,6 @@ extend with #references, #type-ascriptions;
 fn main(n : Nat) -> Nat {
 	return if Nat::iszero(n) then <0x01> else <0x02>
 }
+
+
+//ERROR_UNEXPECTED_MEMORY_ADDRESS

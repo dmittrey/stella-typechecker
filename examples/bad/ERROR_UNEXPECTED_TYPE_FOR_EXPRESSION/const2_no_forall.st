@@ -9,3 +9,6 @@ generic fn const[X](x : X) -> fn(X) -> X {
 fn main(x : Nat) -> Nat {
   return const[Nat](x)[Bool](false)
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

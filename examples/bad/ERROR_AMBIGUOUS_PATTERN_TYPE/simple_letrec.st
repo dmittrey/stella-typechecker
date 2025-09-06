@@ -9,3 +9,5 @@ fn foo(n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
     return letrec x = 0 in x
 }
+
+//ERROR_AMBIGUOUS_PATTERN_TYPE

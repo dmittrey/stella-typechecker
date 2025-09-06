@@ -8,3 +8,5 @@ fn main(n : Nat) -> Nat {
 	    | succ(succ(succ(_))) => 0
    }
 }
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

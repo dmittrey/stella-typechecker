@@ -11,3 +11,5 @@ fn main(input : auto) -> auto {
       inl(n) => n
   }
 }
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

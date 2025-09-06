@@ -6,3 +6,6 @@ fn main(n : Nat) -> Nat {
     	return <0x01>
     }) (0))
 }
+
+
+//ERROR_AMBIGUOUS_REFERENCE_TYPE

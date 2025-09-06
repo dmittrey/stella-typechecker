@@ -9,3 +9,6 @@ fn foo(x : { fst : Nat, snd : Bool, thd : Bool }) -> Nat {
 fn main(n : Nat) -> Nat {
   return foo({ fst = 0, snd = true }) // thd is missing
 }
+
+
+//ERROR_MISSING_RECORD_FIELDS

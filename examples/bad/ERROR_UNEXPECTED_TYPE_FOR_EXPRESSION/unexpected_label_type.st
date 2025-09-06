@@ -9,3 +9,5 @@ fn main(succeed : Bool) -> <| value : Nat, failure : Unit |> {
       then <| value = true |>
       else <| failure = unit |>
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

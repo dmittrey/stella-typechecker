@@ -13,3 +13,6 @@ fn fail(n : Nat) -> <| failure : Nat, value : Nat |> {
 fn main(n : Nat) -> <| value : Nat, failure : Bool |> {
   return fail(n)
 }
+
+
+//ERROR_UNEXPECTED_SUBTYPE

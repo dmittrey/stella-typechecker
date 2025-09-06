@@ -11,3 +11,6 @@ generic fn const[X, Y](x : X) -> fn(Y) -> X {
 fn main(x : Nat) -> Nat {
   return const[Nat](x)(false)
 }
+
+
+//ERROR_INCORRECT_NUMBER_OF_TYPE_ARGUMENTS

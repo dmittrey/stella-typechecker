@@ -9,3 +9,5 @@ fn main(n : Nat) -> Nat {
         return throw(1)
     }) (0)
 }
+
+//ERROR_AMBIGUOUS_THROW_TYPE

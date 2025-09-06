@@ -9,3 +9,5 @@ fn main(succeed : Bool) -> Nat {
       then <| value = 0 |>
       else <| failure = unit |>
 }
+
+//ERROR_UNEXPECTED_VARIANT

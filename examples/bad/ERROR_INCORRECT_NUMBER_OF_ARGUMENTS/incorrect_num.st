@@ -7,3 +7,6 @@ fn main(n : Nat) -> Nat {
     	return 0
     })(0)
 }
+
+
+//ERROR_INCORRECT_NUMBER_OF_ARGUMENTS

@@ -8,3 +8,6 @@ fn main(n : [Nat]) -> Nat {
     	| cons (x, cons(a, xs)) => 0
    }
 }
+
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

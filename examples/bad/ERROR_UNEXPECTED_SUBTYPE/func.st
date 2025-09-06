@@ -10,3 +10,5 @@ fn main(b : Bool) -> (fn(Top) -> Top) {
         return false
     }
 }
+
+//ERROR_UNEXPECTED_SUBTYPE

@@ -8,3 +8,6 @@ fn main(succeed : Bool) -> Nat {
         | <| b = t |> => 0
     }
 }
+
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

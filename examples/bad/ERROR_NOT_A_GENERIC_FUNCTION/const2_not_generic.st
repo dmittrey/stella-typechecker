@@ -9,3 +9,6 @@ fn const(x : Nat) -> forall Y. fn(Y) -> Nat {
 fn main(x : Nat) -> Nat {
   return const[Nat](x)[Bool](false)
 }
+
+
+//ERROR_NOT_A_GENERIC_FUNCTION

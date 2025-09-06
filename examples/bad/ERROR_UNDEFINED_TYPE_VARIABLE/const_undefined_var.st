@@ -11,3 +11,6 @@ generic fn const[X](x : X) -> fn(Y) -> X {
 fn main(x : Nat) -> Nat {
   return const[Nat, Bool](x)(false)
 }
+
+
+//ERROR_UNDEFINED_TYPE_VARIABLE

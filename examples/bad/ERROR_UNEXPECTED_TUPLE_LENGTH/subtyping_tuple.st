@@ -14,3 +14,6 @@ fn tuple_gen(n : Nat) -> {Top, Bool, Nat} {
 fn main(n : Nat) -> {Top, Bool} {
   return tuple_gen(n)
 }
+
+
+//ERROR_UNEXPECTED_TUPLE_LENGTH

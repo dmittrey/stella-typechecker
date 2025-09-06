@@ -13,3 +13,6 @@ fn fail(n : Nat) -> <| failure : Top, value : Nat, value2 : Bool |> {
 fn main(n : Nat) -> <| value : Nat, failure : Top, value3 : Top |> {
   return fail(n)
 }
+
+
+//ERROR_UNEXPECTED_VARIANT_LABEL

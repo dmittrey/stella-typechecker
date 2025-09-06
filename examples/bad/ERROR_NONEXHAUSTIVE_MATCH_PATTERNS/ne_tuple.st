@@ -7,3 +7,5 @@ fn main(n : Nat) -> Nat {
     	{{a, c}, true} => 0
    }
 }
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

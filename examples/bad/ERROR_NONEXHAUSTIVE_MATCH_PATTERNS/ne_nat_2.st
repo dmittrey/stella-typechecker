@@ -9,3 +9,5 @@ fn main(n : Nat) -> Nat {
     | 4 => 0
    }
 }
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

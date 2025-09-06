@@ -9,3 +9,6 @@ fn foo(x : Nat) -> Nat{
 fn main(n : Nat) -> Nat {
   return foo ({ a = 0, b = false })
 }
+
+
+//ERROR_UNEXPECTED_RECORD

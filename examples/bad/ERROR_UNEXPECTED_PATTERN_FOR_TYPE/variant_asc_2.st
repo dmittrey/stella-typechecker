@@ -8,3 +8,6 @@ fn main(succeed : Bool) -> Nat {
         | <| c = t |> => 0 // unknown label c
     }
 }
+
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

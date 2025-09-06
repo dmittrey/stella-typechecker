@@ -8,3 +8,6 @@ fn main(n : Nat) -> Nat {
     with
     { true }
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

@@ -9,3 +9,5 @@ fn foo(a : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return (fn (a : Nat) { return fix(0); } ) (0)
 }
+
+//ERROR_NOT_A_FUNCTION

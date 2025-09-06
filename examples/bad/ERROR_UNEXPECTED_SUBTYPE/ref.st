@@ -9,3 +9,6 @@ extend with #references,
 fn main(n : Nat) -> &Nat {
   return new(true)
 }
+
+
+//ERROR_UNEXPECTED_SUBTYPE

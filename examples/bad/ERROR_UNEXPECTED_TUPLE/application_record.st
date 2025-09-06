@@ -9,3 +9,6 @@ fn foo(x : Nat) -> Nat{
 fn main(n : Nat) -> Nat {
   return foo ({0, false})
 }
+
+
+//ERROR_UNEXPECTED_TUPLE

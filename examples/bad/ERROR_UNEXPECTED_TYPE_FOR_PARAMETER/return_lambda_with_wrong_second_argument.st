@@ -8,3 +8,6 @@ fn main(n : Nat) -> (fn(Bool) -> fn(Bool) -> Nat) {
       }
     }
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_PARAMETER

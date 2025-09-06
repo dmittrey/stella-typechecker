@@ -11,3 +11,5 @@ fn main(input : Bool) -> Nat {
       inl(n) => n
   }
 }
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

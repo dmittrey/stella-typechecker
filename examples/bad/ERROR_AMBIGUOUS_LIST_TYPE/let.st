@@ -6,3 +6,5 @@ extend with #let-bindings;
 fn main(n : Nat) -> Nat {
   return let x = [] in x
 }
+
+//ERROR_AMBIGUOUS_LIST_TYPE

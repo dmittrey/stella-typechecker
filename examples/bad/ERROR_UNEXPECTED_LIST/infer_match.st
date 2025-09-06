@@ -10,3 +10,5 @@ fn main(n : Nat) -> Nat {
 		}
   }) (0)
 }
+
+//ERROR_UNEXPECTED_LIST

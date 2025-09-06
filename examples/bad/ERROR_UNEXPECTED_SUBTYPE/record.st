@@ -13,3 +13,5 @@ fn iterate(n : Nat) -> { current : Nat, next : Nat } {
 fn main(n : Nat) -> { current : Bool } {
   return iterate(0)
 }
+
+//ERROR_UNEXPECTED_SUBTYPE

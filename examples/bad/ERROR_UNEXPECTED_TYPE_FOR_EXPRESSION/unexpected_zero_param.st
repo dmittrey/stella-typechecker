@@ -15,3 +15,5 @@ fn getZero() -> (fn() -> Nat) {
 fn main(n : Nat) -> Nat {
     return getZero()
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

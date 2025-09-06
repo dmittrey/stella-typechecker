@@ -9,3 +9,5 @@ fn increment_twice(n : auto) -> auto {
 fn main(n : Nat) -> Nat {
   return increment_twice(n)
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

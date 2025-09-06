@@ -8,3 +8,5 @@ fn main(n : Nat) -> Nat {
     with
     { 0 }
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

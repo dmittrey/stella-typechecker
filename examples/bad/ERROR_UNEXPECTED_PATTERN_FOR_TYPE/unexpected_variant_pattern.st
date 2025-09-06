@@ -7,3 +7,5 @@ fn main(input : Bool) -> Nat {
      <| failure = f |>  => n
   }
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

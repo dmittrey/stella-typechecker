@@ -13,3 +13,5 @@ fn get_m_f(a : Nat, b : Bool, c : Nat) -> (fn(Nat, Bool) -> Nat) {
 fn main(n : Nat) -> Nat {
     return get_m_f(0, true, 0)
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

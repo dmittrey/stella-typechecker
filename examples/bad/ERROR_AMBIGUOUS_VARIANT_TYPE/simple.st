@@ -9,3 +9,5 @@ fn main(n : Nat) -> <| a : Nat, b : Bool |> {
       else <| b = true |>
      }) (0)
 }
+
+//ERROR_AMBIGUOUS_VARIANT_TYPE

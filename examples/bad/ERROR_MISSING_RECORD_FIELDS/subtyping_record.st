@@ -13,3 +13,5 @@ fn iterate(n : Nat) -> { current : Nat } {
 fn main(n : Nat) -> { current : Nat, next : Nat } {
   return iterate(0)
 }
+
+//ERROR_MISSING_RECORD_FIELDS

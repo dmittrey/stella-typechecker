@@ -9,3 +9,6 @@ fn main(n : Nat) -> (fn(Bool) -> fn(Bool) -> auto) {
       }
     }
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

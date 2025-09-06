@@ -7,3 +7,5 @@ fn foo(arg : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return n(foo(true))
 }
+
+//ERROR_NOT_A_FUNCTION

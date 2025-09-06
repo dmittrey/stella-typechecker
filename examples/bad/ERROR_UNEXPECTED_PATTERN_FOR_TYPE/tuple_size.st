@@ -11,3 +11,5 @@ fn main(n : Nat) -> Nat {
     {x, y, z} => x
 	}
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

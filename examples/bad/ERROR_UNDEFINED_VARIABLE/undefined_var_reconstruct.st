@@ -9,3 +9,5 @@ fn main(n : Nat) -> auto {
 fn foo(n : auto) -> auto {
 		return if n then unk else false;
 }
+
+//ERROR_UNDEFINED_VARIABLE

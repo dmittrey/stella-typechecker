@@ -4,3 +4,5 @@ extend with #type-ascriptions;
 fn main(n : Nat) -> Nat {
   return 0 as Bool
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

@@ -8,3 +8,5 @@ fn main(n : Nat + Bool) -> Nat {
     | inr(b) => 0
    }
 }
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

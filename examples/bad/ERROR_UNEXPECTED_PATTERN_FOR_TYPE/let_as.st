@@ -9,3 +9,5 @@ fn foo(n : Nat) -> Nat {
 fn main(n : Nat) -> Bool {
     return let ((x as Nat) as Bool) = true in x
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

@@ -10,3 +10,6 @@ extend with #references,
 fn main(n : Nat) -> &<| a : Nat, b : Bool |> {
   return new(<| b = 1 |>)
 }
+
+
+//ERROR_UNEXPECTED_SUBTYPE

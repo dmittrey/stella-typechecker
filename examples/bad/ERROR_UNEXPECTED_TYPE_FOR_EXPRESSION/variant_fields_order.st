@@ -8,3 +8,5 @@ fn foo(succeed : Bool) -> <|failure : Nat, value : Nat|> {
 fn main(succeed : Nat) -> <|value : Nat, failure : Nat|> {
   return foo(true)
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

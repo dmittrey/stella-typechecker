@@ -10,3 +10,5 @@ fn main(input : auto) -> Nat {
   return match test(input) {
   }
 }
+
+//ERROR_ILLEGAL_EMPTY_MATCHING

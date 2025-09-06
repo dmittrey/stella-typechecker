@@ -7,3 +7,6 @@ fn main(n : Nat + Bool) -> auto {
     	inl(a) => a
    }
 }
+
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

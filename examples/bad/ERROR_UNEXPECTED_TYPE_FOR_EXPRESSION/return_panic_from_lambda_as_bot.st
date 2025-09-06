@@ -6,3 +6,6 @@ fn main(n : Nat) -> Nat {
     	return panic!
   }) (0)
 }
+
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

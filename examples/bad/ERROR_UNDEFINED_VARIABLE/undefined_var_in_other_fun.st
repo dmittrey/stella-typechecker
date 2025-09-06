@@ -7,3 +7,5 @@ fn foo(a : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
     return a
 }
+
+//ERROR_UNDEFINED_VARIABLE

@@ -9,3 +9,5 @@ fn main(succeed : Bool) -> <| value : Nat, failure : Unit |> {
       then <| v = 0 |>
       else <| failure = unit |>
 }
+
+//ERROR_UNEXPECTED_VARIANT_LABEL

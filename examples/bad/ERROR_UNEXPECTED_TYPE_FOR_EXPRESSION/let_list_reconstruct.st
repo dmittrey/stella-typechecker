@@ -6,3 +6,5 @@ extend with #lists;
 fn main(n : Nat) -> auto {
   return let y = [0, true] in y
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

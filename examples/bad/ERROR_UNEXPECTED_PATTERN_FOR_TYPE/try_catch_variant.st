@@ -11,3 +11,5 @@ fn fail(n : Nat) -> Bool {
 fn main(n : Nat) -> Bool {
 	return try { true } catch { <| x = 1 |> => true }
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

@@ -14,3 +14,5 @@ fn main(succeed : Bool) -> Nat {
     <| fail = f |> => 0
   }
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

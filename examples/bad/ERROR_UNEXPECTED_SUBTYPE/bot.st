@@ -8,3 +8,5 @@ extend with #natural-literals,
 fn main(b : Bool) -> Bot {
     return 1
 }
+
+//ERROR_UNEXPECTED_SUBTYPE

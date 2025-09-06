@@ -14,3 +14,5 @@ fn main(succeed : Bool) -> Nat {
       <| value = n |> => succ(n)
   }
 }
+
+//ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

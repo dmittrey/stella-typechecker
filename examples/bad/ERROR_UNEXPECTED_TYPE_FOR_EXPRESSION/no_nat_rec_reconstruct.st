@@ -8,3 +8,5 @@ fn main(n : Nat) -> auto {
              return succ( r )
            } })
 }
+
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

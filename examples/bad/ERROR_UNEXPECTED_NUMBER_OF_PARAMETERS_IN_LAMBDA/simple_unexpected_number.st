@@ -8,3 +8,5 @@ fn main(n : Nat) -> (fn(Nat) -> Nat) {
     	return 0
     }
 }
+
+//ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA

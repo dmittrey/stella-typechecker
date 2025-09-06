@@ -12,3 +12,5 @@ fn main(input : Bool) -> Nat {
     | inr(_) => 0
   }
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE
