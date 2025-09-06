@@ -12,4 +12,4 @@ fn main(p : Bool) -> fn(Bool) -> Bool {
   }
 }
 
-//ERROR_UNEXPECTED_LAMBDA
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

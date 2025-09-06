@@ -4,3 +4,5 @@ extend with #references, #lists;
 fn main(n : Nat) -> [&Nat] {
   return [<0xABCD>, <0x1234>]
 }
+
+//SUCCESS

@@ -22,7 +22,8 @@ typeCheck (AProgram _ exts decls) =
             then foldl stepOpenVariantExn ExnTypeNotDeclared decls
             else ExnTypeNotDeclared
     in
-        case (foldl stepCheck (CheckOk, Env { envVars = [], envExn = exnCtx }) decls) of
+        -- putStrLn $ "Type error: " ++ show exnCtx
+        case (foldl stepCheck (CheckOk, Env { envVars = [], envExn = exnCtx, isAmbTyAsBot = useAmbTyAsBot }) decls) of
             ((CheckErr err), env) -> putStrLn $ "Type error: " ++ show err
             (CheckOk, env) -> 
                 case lookup (StellaIdent "main") (envVars env) of
@@ -38,6 +39,9 @@ typeCheck (AProgram _ exts decls) =
 
     useOpenVariantExn :: Bool
     useOpenVariantExn = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#open-variant-exceptions") ns) exts
+
+    useAmbTyAsBot :: Bool
+    useAmbTyAsBot = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#ambiguous-type-as-bottom") ns) exts
 
     stepExnTypeDecl :: ExnCtx -> Decl -> ExnCtx
     stepExnTypeDecl _ (DeclExceptionType ty) = ExnTypeDecl ty

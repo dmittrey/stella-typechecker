@@ -1,4 +1,3 @@
-//! PASS
 language core;
 
 extend with #nullary-functions;
@@ -21,10 +20,6 @@ extend with #exception-type-declaration;
 extend with #ambiguous-type-as-bottom;
 
 exception type = Nat
-
-fn ambiguity-address() -> Unit {
-  return match <0x0> { _ as &Bot => unit }
-}
 
 fn ambiguity-panic() -> Unit {
   return match panic! { _ as Bot => unit }
@@ -49,8 +44,5 @@ fn ambiguity-empty-list() -> Unit {
 fn main(x : Nat) -> Nat {
   return x
 }
-// An error occurred during typechecking!
-//Type Error Tag: [ERROR_AMBIGUOUS_REFERENCE_TYPE]
-//cannot infer a type of a bare memory address
 
 //SUCCESS

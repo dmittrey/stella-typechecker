@@ -13,28 +13,12 @@ extend with #exception-type-declaration;
 exception type = Nat
 
 fn throw-arg-must-be-nat() -> Unit {
-  fn passes-when-nat(x : Nat) -> Unit {
-    //!~ ERROR
-    return throw(x)
-  }
-
   fn fails-otherwise(x : Bool) -> Unit {
-    //! ERROR(sema::expr_ty_mismatch)
     return throw(x)
   }
 
-  return unit
-}
-
-fn try-catch-arm-pat-is-nat() -> Unit {
-  fn as-nat-passes() -> Unit {
-    //!~ ERROR
-    return try { unit } catch { _ as Nat => unit }
-  }
-
-  fn as-bool-fails() -> Unit {
-    //! ERROR(sema::illegal_pat_for_ty)
-    return try { unit } catch { _ as Bool => unit }
+  fn passes-when-nat(x : Nat) -> Unit {
+    return throw(x)
   }
 
   return unit

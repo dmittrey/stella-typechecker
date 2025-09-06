@@ -83,7 +83,7 @@ data CErrType
     | ERROR_AMBIGUOUS_PANIC_TYPE
     | ERROR_EXCEPTION_TYPE_NOT_DECLARED Expr
     | ERROR_AMBIGUOUS_THROW_TYPE
-    | DEBUG Pattern Type
+    | DEBUG Type
   deriving (Eq, Ord, Show, Read)
 
 -- Контекст типов ошибок
@@ -130,13 +130,8 @@ checkArgs env (e:es) (ty:tys) =
   exprCheck env e ty
   >>> checkArgs env es tys
 
-declCheck :: Env -> Decl -> (CheckResult, Env)
-declCheck env (DeclFun _ name [] NoReturnType _ _ expr) =
-    (exprCheck env expr TypeUnit, env)
-declCheck env (DeclFun _ name [] (SomeReturnType retTy) _ _ expr) =
-    (exprCheck env expr retTy, env)
-
 -- Core, #nested-function-declarations, #nullary-functions
+declCheck :: Env -> Decl -> (CheckResult, Env)
 declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throwTy decls expr) =
     let
         resultTy = case retTy of
@@ -168,6 +163,7 @@ declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throw
   where
     step (CheckOk, envAcc) d = declCheck envAcc d
     step (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
+
 
 declCheck e (DeclExceptionType _) = (CheckOk, e)
 declCheck e (DeclExceptionVariant _ _) = (CheckOk, e)
@@ -551,12 +547,23 @@ exprCheck env (Throw t1) t =
     case envExn env of
         ExnTypeNotDeclared ->
             CheckErr (ERROR_EXCEPTION_TYPE_NOT_DECLARED t1)
-        ExnTypeDecl ty ->
+        ExnTypeDecl ty -> do
             exprCheck env t1 ty
-        ExnOpenVariant tv ->
+            if TypeBottom <: t
+               then CheckOk
+               else CheckErr (DEBUG TypeBottom)
+        ExnOpenVariant tv -> do
             exprCheck env t1 (TypeVariant tv)
+            if TypeBottom <: t
+               then CheckOk
+               else CheckErr (DEBUG TypeBottom)
 
--- ====== T-Try ======
+-- ====== T-TryWith ======
+exprCheck env (TryWith e1 e2) t =
+    exprCheck env e1 t
+    >>> exprCheck env e2 t
+
+-- ====== T-TryCatch ======
 exprCheck env (TryCatch e1 pat e2) t =
     exprCheck env e1 t
     >>> case envExn env of
@@ -899,7 +906,19 @@ exprInfer env (Throw _)
     | isAmbTyAsBot env  = InferOk TypeBottom
     | otherwise         = InferErr ERROR_AMBIGUOUS_THROW_TYPE
 
--- ====== T-Try ======
+-- ====== T-TryWith ======
+exprInfer env (TryWith e1 e2) =
+    case exprInfer env e1 of
+        InferErr err ->
+            InferErr err
+        InferOk ty ->
+            case exprCheck env e2 ty of
+                CheckOk ->
+                    InferOk ty
+                CheckErr err ->
+                    InferErr err
+
+-- ====== T-TryCatch ======
 exprInfer env (TryCatch e1 pat e2) =
     case exprInfer env e1 of
         InferErr err ->
@@ -1247,8 +1266,10 @@ bindPattern :: Env -> Pattern -> Type -> InferResult Env
 bindPattern env p@(PatternCastAs pat ty) t =
     InferErr (ERROR_PATTERN_NOT_SUPPORTED p t)
 
-bindPattern env p@(PatternAsc pat ty) t =
-    InferErr (ERROR_PATTERN_NOT_SUPPORTED p t)
+-- bindPattern env (PatternAsc pat ascTy) ty
+    -- | ascTy <: ty   = bindPattern env pat ascTy
+    -- | otherwise     = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
+    -- | otherwise     = InferOk env
 
 bindPattern env (PatternVariant ident patData) (TypeVariant fields) =
     case patData of
@@ -1333,7 +1354,6 @@ bindPattern env PatternUnit TypeUnit =
 bindPattern _   PatternUnit ty =
     InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ty)
 
--- Надеюсь что парсер сделал за меня грязную работу и с остальными литерала не взлетит
 bindPattern env (PatternInt n) TypeNat =
     InferOk env
 bindPattern _   (PatternInt n) ty =

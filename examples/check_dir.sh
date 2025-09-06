@@ -34,9 +34,11 @@ for file in "$DIR"/*; do
         echo "$output"
 
         if [[ "$expected" == "SUCCESS" && "$normalized" == "Type checking passed!" ]]; then
-            echo "✅ Совпало: SUCCESS"
+            # echo "✅ Совпало: SUCCESS"
+            continue
         elif [[ "$normalized" == Type\ error:* && "$expected" == "$actual_code" ]]; then
-            echo "✅ Совпало: $expected"
+            # echo "✅ Совпало: $expected"
+            continue
         else
             echo "❌ Несовпадение!"
             echo "   Ожидалось: $expected"
