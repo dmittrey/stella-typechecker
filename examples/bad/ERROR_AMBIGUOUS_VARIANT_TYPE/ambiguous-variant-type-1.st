@@ -6,3 +6,5 @@ extend with #type-ascriptions;
 fn main(n : Nat) -> fn(Bool) -> Nat {
   return (fn (b : Bool) { return  <| value = n |>  })(true)
 }
+
+//ERROR_AMBIGUOUS_VARIANT_TYPE

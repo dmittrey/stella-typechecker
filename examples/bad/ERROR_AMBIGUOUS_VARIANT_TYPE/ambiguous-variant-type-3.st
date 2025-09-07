@@ -16,3 +16,5 @@ fn main(x : Nat) -> Nat {
         as <| number : Nat, boolean : Bool, function : fn(Nat) -> Nat |>) }
   |> as <| number : Nat, boolean : Bool, function : fn(Nat) -> Nat |>)
 }
+
+//ERROR_AMBIGUOUS_VARIANT_TYPE

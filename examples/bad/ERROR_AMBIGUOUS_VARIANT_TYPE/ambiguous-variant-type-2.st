@@ -7,3 +7,5 @@ extend with #pairs;
 fn main(n : Nat) -> Nat {
   return {<| value = n |>, 0}.2
 }
+
+//ERROR_AMBIGUOUS_VARIANT_TYPE
