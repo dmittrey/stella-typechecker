@@ -8,6 +8,4 @@ fn main(n : <| a : Nat, b, c |>) -> Nat {
       | m => 0
   }
 }
-
-
 //ERROR_UNEXPECTED_NULLARY_VARIANT_PATTERN

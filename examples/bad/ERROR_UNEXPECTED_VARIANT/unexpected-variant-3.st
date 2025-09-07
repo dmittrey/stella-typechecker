@@ -15,3 +15,5 @@ fn proc(list : [Bool]) -> Nat {
 fn main(n : Nat) -> Nat {
   return proc(cons(false, [true, false, <| value = n |>, false]))
 }
+
+//ERROR_UNEXPECTED_VARIANT 

@@ -6,6 +6,6 @@ fn main(n : Nat) -> Nat {
              return fn(r : Nat) {
              return succ( r )
            } })
-}
-
-//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+}//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+\n\n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+/n/n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

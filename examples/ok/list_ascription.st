@@ -5,4 +5,5 @@ extend with #lists;
 fn main(n : Nat) -> [Bool] {
   return [] as [Bool]
 }
+
 //SUCCESS

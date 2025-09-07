@@ -8,6 +8,6 @@ fn foo(a : Nat) -> Bool {
 
 fn main(n : Nat) -> Bool {
   return (fn (a : Nat) { return fix(foo); } ) (0)
-}
-
-//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+}//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+\n\n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+/n/n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

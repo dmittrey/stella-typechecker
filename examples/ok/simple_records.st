@@ -8,4 +8,5 @@ fn iterate(n : Nat) -> { current : Nat, next : Nat } {
 fn main(n : Nat) -> Nat {
   return iterate(0).next
 }
+
 //SUCCESS

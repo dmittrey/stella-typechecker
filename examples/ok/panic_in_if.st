@@ -5,4 +5,5 @@ fn main(n : Nat) -> Nat {
   return if false then panic! else panic!; 0
 }
 
+
 //SUCCESS

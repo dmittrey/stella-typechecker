@@ -6,4 +6,5 @@ fn main(n : Nat) -> Nat {
 		}
   }) (0)
 }
+
 //SUCCESS

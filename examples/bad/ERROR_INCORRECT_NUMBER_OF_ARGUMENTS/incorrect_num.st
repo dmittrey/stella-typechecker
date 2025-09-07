@@ -8,5 +8,4 @@ fn main(n : Nat) -> Nat {
     })(0)
 }
 
-
 //ERROR_INCORRECT_NUMBER_OF_ARGUMENTS

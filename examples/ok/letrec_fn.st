@@ -12,4 +12,5 @@ fn main(n : Nat) -> Nat {
   	} 
   	in f(0)
 }	
+
 //SUCCESS

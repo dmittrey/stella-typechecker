@@ -30,8 +30,8 @@ data CErrType
     | ERROR_EXPR_INFER_NOT_IMPLEMENTED Expr
     | ERROR_PATTERN_NOT_SUPPORTED Pattern Type
     | ERROR_MATCH_NOT_SUPPORTED Type
-    | ERROR_PATTERN_TYPE_REQUIRED_FOR_LETREC Pattern
 
+    | ERROR_AMBIGUOUS_PATTERN_TYPE Pattern
     | ERROR_MISSING_MAIN
     | ERROR_UNDEFINED_VARIABLE StellaIdent
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
@@ -53,7 +53,7 @@ data CErrType
     | ERROR_UNEXPECTED_TUPLE_LENGTH
     | ERROR_AMBIGUOUS_SUM_TYPE Expr
     | ERROR_AMBIGUOUS_VARIANT_TYPE Expr
-    | ERROR_AMBIGUOUS_LIST
+    | ERROR_AMBIGUOUS_LIST_TYPE
     | ERROR_NOT_A_LIST Type
     | ERROR_ILLEGAL_EMPTY_MATCHING
     | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase]
@@ -75,6 +75,7 @@ data CErrType
     | ERROR_EXCEPTION_TYPE_NOT_DECLARED Expr
     | ERROR_AMBIGUOUS_THROW_TYPE
     | ERROR_UNEXPECTED_SUBTYPE Type Type -- SubType Type
+    | ERROR_UNEXPECTED_REFERENCE
     | DEBUG Type
   deriving (Eq, Ord, Show, Read)
 
@@ -168,46 +169,76 @@ declCheck e d = (CheckErr (ERROR_DECL_CHECK_NOT_IMPLEMENTED d), e)
 exprCheck :: Env -> Expr -> Type -> CheckResult
 
 -- ====== T-True ======
-exprCheck _ ConstTrue TypeBool =
-    CheckOk
-exprCheck _ ConstTrue t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION ConstTrue TypeBool t)
+exprCheck env ConstTrue t
+    | isSubtyping env =
+        if (TypeBool <: t)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeBool t)
+    | otherwise       =
+        if (t == TypeBool)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION ConstTrue TypeBool t)
 
 -- ====== T-False ======
-exprCheck _ ConstFalse TypeBool =
-    CheckOk
-exprCheck _ ConstFalse t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION ConstFalse TypeBool t)
+exprCheck env ConstFalse t
+    | isSubtyping env =
+        if (TypeBool <: t)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeBool t)
+    | otherwise       =
+        if (t == TypeBool)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION ConstFalse TypeBool t)
 
 -- ====== T-If ======
-exprCheck env (If e1 e2 e3) t = do
+exprCheck env (If e1 e2 e3) t =
     exprCheck env e1 TypeBool
     >>> exprCheck env e2 t
     >>> exprCheck env e3 t
 
 -- ====== T-Zero ======
-exprCheck _ (ConstInt 0) TypeNat =
-    CheckOk
-exprCheck _ (ConstInt 0) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstInt 0) TypeNat t)
+exprCheck env (ConstInt 0) t
+    | isSubtyping env =
+        if (TypeNat <: t)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeNat t)
+    | otherwise       =
+        if (t == TypeNat)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstInt 0) TypeNat t)
 
 -- ====== T-Succ ======
-exprCheck env (Succ e) TypeNat =
-    exprCheck env e TypeNat
-exprCheck env (Succ e) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Succ e) TypeNat t)
+exprCheck env (Succ e) t
+    | isSubtyping env =
+        if (TypeNat <: t)
+            then exprCheck env e TypeNat
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeNat t)
+    | otherwise       =
+        if (t == TypeNat)
+            then exprCheck env e TypeNat
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Succ e) TypeNat t)
 
 -- ====== T-Pred ======
-exprCheck env (Pred e) TypeNat =
-    exprCheck env e TypeNat
-exprCheck env (Pred e) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Pred e) TypeNat t)
+exprCheck env (Pred e) t
+    | isSubtyping env =
+        if (TypeNat <: t)
+            then exprCheck env e TypeNat
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeNat t)
+    | otherwise       =
+        if (t == TypeNat)
+            then exprCheck env e TypeNat
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Pred e) TypeNat t)
 
 -- ====== T-IsZero ======
-exprCheck env (IsZero e) TypeBool =
-    exprCheck env e TypeNat
-exprCheck env (IsZero e) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (IsZero e) TypeBool t)
+exprCheck env (IsZero e) t
+    | isSubtyping env =
+        if (TypeBool <: t)
+            then exprCheck env e TypeNat
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeBool t)
+    | otherwise       =
+        if (t == TypeBool)
+            then exprCheck env e TypeNat
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (IsZero e) TypeBool t)
 
 -- ====== T-NatRec ======
 exprCheck env (NatRec n z s) ty =
@@ -216,56 +247,79 @@ exprCheck env (NatRec n z s) ty =
     >>> exprCheck env s (TypeFun [TypeNat] (TypeFun [ty] ty))
 
 -- ====== T-Var ======
-exprCheck env (Var ident) t =
-  case lookup ident (envVars env) of
-    Just ty | ty == t   -> CheckOk
-            | otherwise -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Var ident) ty t)
-    Nothing             -> CheckErr (ERROR_UNDEFINED_VARIABLE ident)
+exprCheck env (Var ident) t
+    | isSubtyping env =
+        case lookup ident (envVars env) of
+            Just ty ->
+                case (ty, t) of
+                    (TypeFun lParams lRet, TypeFun rParams rRet)
+                        | length lParams /= length rParams -> CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
+                        | ty <: t                         -> CheckOk
+                        | otherwise                        -> CheckErr (ERROR_UNEXPECTED_SUBTYPE ty t)
+                    _ | ty <: t                           -> CheckOk
+                      | otherwise                          -> CheckErr (ERROR_UNEXPECTED_SUBTYPE ty t)
+            Nothing -> CheckErr (ERROR_UNDEFINED_VARIABLE ident)
+    | otherwise =
+        case lookup ident (envVars env) of
+            Just ty ->
+                case (ty, t) of
+                    (TypeFun lParams lRet, TypeFun rParams rRet)
+                        | length lParams /= length rParams -> CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
+                        | ty == t                          -> CheckOk
+                        | otherwise                        -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Var ident) ty t)
+                    _ | ty == t                             -> CheckOk
+                      | otherwise                            -> CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Var ident) ty t)
+            Nothing -> CheckErr (ERROR_UNDEFINED_VARIABLE ident)
+
 
 -- ====== T-Abs ======
 exprCheck env (Abstraction params e) (TypeFun expParamTys retTy) =
     case checkParams env params expParamTys of
         (CheckOk, newEnv) -> exprCheck newEnv e retTy
         (CheckErr err, _) -> CheckErr err
-  where
-    checkParams :: Env -> [ParamDecl] -> [Type] -> (CheckResult, Env)
-    checkParams env [] [] = (CheckOk, env)
-    checkParams env ((AParamDecl ident actualTy):ps) (ty:tys)
-        | length ps /= length tys =
-            (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
-
-        | actualTy /= ty =
-            (CheckErr (ERROR_UNEXPECTED_TYPE_FOR_PARAMETER ident ty actualTy), env)
-
-        | otherwise =
-            let (res, env') = checkParams env ps tys
-            in (res, env' { envVars = (ident, actualTy) : envVars env' })
-
-
--- Check type with non TypeFun (ERROR_UNEXPECTED_LAMBDA)
-exprCheck env expression@(Abstraction ((AParamDecl paramIdent paramGotTy) : params) e) t =
-    CheckErr (ERROR_UNEXPECTED_LAMBDA expression t)
+-- Ошибка если тип не TypeFun
+exprCheck env expr@(Abstraction _ _) t =
+    CheckErr (ERROR_UNEXPECTED_LAMBDA expr t)
 
 -- ====== T-App ======
-exprCheck env (Application t1 args) expectedTy =
-  case exprInfer env t1 of
-    InferOk (TypeFun paramTys resultTy)
-      | resultTy == expectedTy ->
-          checkArgs env args paramTys
-      | otherwise ->
-          CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
-                      t1
-                      (TypeFun paramTys expectedTy)
-                      (TypeFun paramTys resultTy))
-    InferOk _ ->
-      CheckErr (ERROR_NOT_A_FUNCTION t1)
-    InferErr err ->
-      CheckErr err
+exprCheck env (Application t1 args) expectedTy
+    | isSubtyping env =
+        case exprInfer env t1 of
+            InferOk (TypeFun paramTys resultTy)
+                | resultTy <: expectedTy ->
+                    checkArgs env args paramTys
+                | otherwise ->
+                    CheckErr (ERROR_UNEXPECTED_SUBTYPE resultTy expectedTy)
+            InferOk _ ->
+                CheckErr (ERROR_NOT_A_FUNCTION t1)
+            InferErr err ->
+                CheckErr err
+    | otherwise       =
+        case exprInfer env t1 of
+            InferOk (TypeFun paramTys resultTy)
+              | resultTy == expectedTy ->
+                  checkArgs env args paramTys
+              | otherwise ->
+                  CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+                              t1
+                              (TypeFun paramTys expectedTy)
+                              (TypeFun paramTys resultTy))
+            InferOk _ ->
+              CheckErr (ERROR_NOT_A_FUNCTION t1)
+            InferErr err ->
+              CheckErr err
+  
 
 -- ====== T-Unit ======
-exprCheck _ ConstUnit TypeUnit = CheckOk
-exprCheck _ ConstUnit t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstUnit) TypeUnit t)
+exprCheck env ConstUnit t
+    | isSubtyping env =
+        if (TypeUnit <: t)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeBool t)
+    | otherwise       =
+        if (t == TypeUnit)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstUnit) TypeUnit t)
 
 -- ====== T-Seq ======
 exprCheck env (Sequence e1 e2) t =
@@ -281,6 +335,10 @@ exprCheck env (TypeAsc e ty) t =
 exprCheck env (TryCastAs castExpr castTy pat succExpr catchExpr) ty =
     bindPattern env pat castTy >>= \e' -> exprCheck e' succExpr ty
     >>> exprCheck env catchExpr ty
+
+-- ====== T-CastAs ======
+exprCheck env (TypeCast e targetTy) ty =
+    exprCheck env (TypeCast e targetTy) ty
 
 -- ====== T-Let ======
 exprCheck env (Let bindings expr) t =
@@ -314,7 +372,7 @@ exprCheck env (LetRec bindings body) tyC =
                             CheckOk     -> InferOk env'
                             CheckErr er -> InferErr er
                     InferErr er -> InferErr er
-            _ -> InferErr (ERROR_PATTERN_TYPE_REQUIRED_FOR_LETREC pat)
+            _ -> InferErr (ERROR_AMBIGUOUS_PATTERN_TYPE pat)
     step (InferErr err) _ = InferErr err
 
 -- ====== T-Tuple ======
@@ -463,8 +521,15 @@ exprCheck env (ConsList e1 e2) (TypeList ty) =
     exprCheck env e1 ty
     >>> exprCheck env e2 (TypeList ty)
 
-exprCheck env e@(ConsList e1 e2) ty =
-    CheckErr (ERROR_UNEXPECTED_LIST e)
+exprCheck env e@(ConsList _ _) ty
+    | isSubtyping env =
+        case exprInfer env e of
+            InferOk inferredTy ->
+                if inferredTy <: ty
+                   then CheckOk
+                   else CheckErr (ERROR_UNEXPECTED_SUBTYPE inferredTy ty)
+            InferErr err -> CheckErr err
+    | otherwise = CheckErr (ERROR_UNEXPECTED_LIST e)
 
 -- ====== T-Fix ======
 exprCheck env (Fix expr@(Abstraction params e)) ty =
@@ -486,46 +551,92 @@ exprCheck env (Match t cases) tyC =
         InferOk ty  -> checkMatchCases env cases ty tyC
 
 -- ====== T-Natural ======
-exprCheck _ (ConstInt n) TypeNat = CheckOk -- #natural-literals
-exprCheck _ (ConstInt n) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstInt n) TypeNat t)
+exprCheck env (ConstInt n) t
+    | isSubtyping env =
+        if (TypeNat <: t)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeNat t)
+    | otherwise       =
+        if (t == TypeNat)
+            then CheckOk
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (ConstInt n) TypeNat t)
 
 -- ====== T-Add ======
-exprCheck env (Add e1 e2) TypeNat = 
-    exprCheck env e1 TypeNat
-    >>> exprCheck env e2 TypeNat
+exprCheck env (Add e1 e2) t
+    | isSubtyping env =
+        if (TypeNat <: t)
+            then exprCheck env e1 TypeNat
+                >>> exprCheck env e2 TypeNat
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeNat t)
+    | otherwise       =
+        if (t == TypeNat)
+            then exprCheck env e1 TypeNat
+                >>> exprCheck env e2 TypeNat
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Add e1 e2) TypeNat t)
 
 -- ====== T-Equal ======
-exprCheck env (Equal e1 e2) t =
-    case exprInfer env e1 of
-        InferOk ty1 ->
-            exprCheck env e2 ty1
-        InferErr err ->
-            CheckErr err
+exprCheck env (Equal e1 e2) t
+    | isSubtyping env =
+        if (TypeBool <: t)
+            then case exprInfer env e1 of
+                InferOk ty1 ->
+                    exprCheck env e2 ty1
+                InferErr err ->
+                    CheckErr err
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeBool t)
+    | otherwise       =
+        if (t == TypeBool)
+            then case exprInfer env e1 of
+                InferOk ty1 ->
+                    exprCheck env e2 ty1
+                InferErr err ->
+                    CheckErr err
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Equal e1 e2) TypeBool t)
 
 -- ====== T-Ref ======
+exprCheck env e@(Ref _) t
+    | isSubtyping env =
+        case exprInfer env e of
+            InferOk inferredTy ->
+                if inferredTy <: t
+                   then CheckOk
+                   else CheckErr (ERROR_UNEXPECTED_SUBTYPE inferredTy t)
+            InferErr err -> CheckErr err
+
+-- без подтипирования
 exprCheck env (Ref e) (TypeRef ty) =
     exprCheck env e ty
 
 exprCheck _ e@(Ref _) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e (TypeRef t) t)
+    CheckErr (ERROR_UNEXPECTED_REFERENCE)
+
 
 -- ====== T-Deref ======
 exprCheck env (Deref e) t =
     exprCheck env e (TypeRef t)
 
 -- ====== T-Assign ======
-exprCheck env (Assign el er) TypeUnit =
-    case exprInfer env el of
-        InferOk (TypeRef ty) ->
-            exprCheck env er ty
-        InferOk _ ->
-            CheckErr (ERROR_NOT_A_REFERENCE el)
-        InferErr err ->
-            CheckErr err
-
-exprCheck _ e@(Assign _ _) t =
-    CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION e TypeUnit t)
+exprCheck env (Assign el er) t
+    | isSubtyping env =
+        if (TypeUnit <: t)
+            then case exprInfer env el of
+                InferOk (TypeRef ty) ->
+                    exprCheck env er ty
+                InferOk _ ->
+                    CheckErr (ERROR_NOT_A_REFERENCE el)
+                InferErr err ->
+                    CheckErr err
+            else CheckErr (ERROR_UNEXPECTED_SUBTYPE TypeUnit t)
+    | otherwise       =
+        if (t == TypeUnit)
+            then case exprInfer env el of
+                InferOk (TypeRef ty) ->
+                    exprCheck env er ty
+                InferOk _ ->
+                    CheckErr (ERROR_NOT_A_REFERENCE el)
+                InferErr err ->
+                    CheckErr err
+            else CheckErr (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION (Assign el er) TypeUnit t)
 
 -- ====== T-Memory ======
 exprCheck env (ConstMemory (MemoryAddress adrStr)) (TypeRef _) =
@@ -709,6 +820,9 @@ exprInfer env (TryCastAs castExpr castTy pat succExpr catchExpr) =
                 CheckOk ->
                     InferOk ty
 
+-- ====== T-CastAs ======
+exprInfer env (TypeCast _ targetTy) = InferOk targetTy
+
 -- ====== T-Let ======
 exprInfer env (Let bindings expr) =
     case foldl step (InferOk env) bindings of
@@ -793,6 +907,16 @@ exprInfer env (Inr expr)
     -- TODO Там надо добавить как есть, тк он потом по отношению подтипизации превратиться в другой
 exprInfer env expr@(Variant ident exprData)
     | isAmbTyAsBot env  = InferOk TypeBottom
+    | isSubtyping env   = 
+        case exprData of
+            NoExprData ->
+                InferOk (TypeVariant [(AVariantFieldType ident NoTyping)])
+            SomeExprData e ->
+                case exprInfer env e of
+                    InferErr err ->
+                        InferErr err
+                    InferOk ty ->
+                        InferOk (TypeVariant [(AVariantFieldType ident (SomeTyping ty))])
     | otherwise         = InferErr (ERROR_AMBIGUOUS_VARIANT_TYPE expr)
 
 -- ====== T-Head ======
@@ -828,7 +952,8 @@ exprInfer env (IsEmpty expr) =
 -- ====== T-List ======
 exprInfer env (List [])
     | isAmbTyAsBot env  = InferOk (TypeList TypeBottom)
-    | otherwise         = InferErr ERROR_AMBIGUOUS_LIST
+    | isSubtyping env   = InferOk (TypeList TypeBottom)
+    | otherwise         = InferErr ERROR_AMBIGUOUS_LIST_TYPE
 
 exprInfer env (List (e:es)) =
     case exprInfer env e of
@@ -1023,6 +1148,10 @@ checkMatchCases env cases (TypeVariant fields) tyC =
 checkMatchCases env cases TypeBool tyC =
     checkMatchCasesBool env cases tyC
 
+-- TypeNat
+checkMatchCases env cases TypeNat tyC =
+    checkMatchCasesNat env cases tyC
+
 -- Fallback
 checkMatchCases env cases ty tyC =
     checkMatchCasesGeneric env cases ty tyC
@@ -1101,6 +1230,28 @@ checkMatchCasesBool env cases tyC =
             let res = bindPattern env pat TypeBool >>= \env' -> exprCheck env' expr tyC
             in res >>> go rest True True
 
+checkMatchCasesNat :: Env -> [MatchCase] -> Type -> CheckResult
+checkMatchCasesNat env cases tyC =
+    go cases False False
+  where
+    go [] seenZero seenSucc
+      | not seenZero = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not seenSucc = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | otherwise    = CheckOk
+
+    go (AMatchCase pat expr : rest) seenZero seenSucc =
+      case pat of
+        PatternInt 0 ->
+          exprCheck env expr tyC >>> go rest True seenSucc
+        PatternSucc p ->
+          case bindPattern env p TypeNat of
+            InferErr err -> CheckErr err
+            InferOk env' ->
+              exprCheck env' expr tyC >>> go rest seenZero True
+        _ ->
+          let res = bindPattern env pat TypeNat >>= \env' -> exprCheck env' expr tyC
+          in res >>> go rest True True
+
 checkMatchCasesGeneric :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesGeneric env cases ty tyC =
     go cases
@@ -1112,8 +1263,8 @@ checkMatchCasesGeneric env cases ty tyC =
 
 -- ====== Bind Type By Pattern ======
 
--- (-) PatternCastAs Pattern Type
--- (-) PatternAsc Pattern Type
+-- (+) PatternCastAs Pattern Type
+-- (+) PatternAsc Pattern Type
 -- (+) PatternVariant StellaIdent PatternData
 -- (+) PatternInl Pattern
 -- (+) PatternInr Pattern
@@ -1250,27 +1401,58 @@ lookupVariantField ident fields =
             Just (NoTyping)         -> VariantFieldExistNoType
             Nothing                 -> VariantFieldMissing
 
--- Subsumption
+-- | Подтипизация
 (<:) :: Type -> Type -> Bool
-TypeBottom      <: _                = True
-_               <: TypeTop          = True
-t1              <: t2               | t1 == t2 = True
-
-(TypeSum l1 r1) <: (TypeSum l2 r2)  =
-    l1 <: l2 && r1 <: r2
-
-(TypeTuple ts1) <: (TypeTuple ts2) =
-    length ts1 == length ts2 && and (zipWith (<:) ts1 ts2)
-
-(TypeList t1)   <: (TypeList t2) =
-    t1 <: t2
-
-(TypeRef t1)    <: (TypeRef t2) =
-    t1 <: t2
-
-(TypeFun args1 res1) <: (TypeFun args2 res2) =
-    length args1 == length args2
-    && and (zipWith (flip (<:)) args1 args2)
-    && res1 <: res2
-
+-- Top / Bottom
+_ <: TypeTop = True
+TypeBottom <: _ = True
+-- Bool / Nat / Unit
+TypeBool <: TypeBool = True
+TypeNat  <: TypeNat  = True
+TypeUnit <: TypeUnit = True
+-- Суммы: ковариантность по каждому элементу
+TypeSum l1 l2 <: TypeSum r1 r2 = (l1 <: r1) && (l2 <: r2)
+-- Функции: контравариантность аргументов, ковариантность результата
+TypeFun lParams lRet <: TypeFun rParams rRet =
+    length lParams == length rParams &&
+    and [ rTy <: lTy | (lTy,rTy) <- zip lParams rParams ] &&  -- контравариантность аргументов
+    lRet <: rRet                                              -- ковариантность результата
+-- Рекорды: подтип может иметь больше полей
+TypeRecord lFields <: TypeRecord rFields =
+    let lMap = Map.fromList [(name, ty) | ARecordFieldType name ty <- lFields]
+        rMap = Map.fromList [(name, ty) | ARecordFieldType name ty <- rFields]
+    in Set.fromList (Map.keys rMap) `Set.isSubsetOf` Set.fromList (Map.keys lMap) &&
+       all (\(k,rTy) -> case Map.lookup k lMap of
+                          Just lTy -> lTy <: rTy
+                          Nothing  -> False) (Map.toList rMap)
+-- Варианты: подтип может иметь меньше конструкторов
+TypeVariant lFields <: TypeVariant rFields =
+    let lMap = Map.fromList [(name, ty) | AVariantFieldType name tyOpt <- lFields, SomeTyping ty <- [tyOpt]]
+        rMap = Map.fromList [(name, ty) | AVariantFieldType name tyOpt <- rFields, SomeTyping ty <- [tyOpt]]
+        -- Игнорируем nullary конструкторы (NoTyping) при сравнении
+    in Set.fromList (Map.keys lMap) `Set.isSubsetOf` Set.fromList (Map.keys rMap) &&
+       all (\(k,lTy) -> case Map.lookup k rMap of
+                          Just rTy -> lTy <: rTy
+                          Nothing  -> False) (Map.toList lMap)
+-- Списки и ссылки ковариантны
+TypeList lTy <: TypeList rTy = lTy <: rTy
+TypeRef lTy  <: TypeRef rTy  = lTy <: rTy
+-- Иначе
 _ <: _ = False
+
+-- | Проверка параметров для функций с подтипированием
+checkParams :: Env -> [ParamDecl] -> [Type] -> (CheckResult, Env)
+checkParams env [] [] = (CheckOk, env)
+checkParams env ((AParamDecl ident actualTy):ps) (ty:tys)
+    | length ps /= length tys =
+        (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
+    | isSubtyping env && ty <: actualTy =
+        let (res, env') = checkParams env ps tys
+        in (res, env' { envVars = (ident, actualTy) : envVars env' })
+    | not (isSubtyping env) && actualTy == ty =
+        let (res, env') = checkParams env ps tys
+        in (res, env' { envVars = (ident, actualTy) : envVars env' })
+    | isSubtyping env && not (ty <: actualTy) =
+        (CheckErr (ERROR_UNEXPECTED_SUBTYPE ty actualTy), env)
+    | otherwise =
+        (CheckErr (ERROR_UNEXPECTED_TYPE_FOR_PARAMETER ident ty actualTy), env)

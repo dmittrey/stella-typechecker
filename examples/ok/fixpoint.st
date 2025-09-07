@@ -6,4 +6,5 @@ fn main(n : Nat) -> Nat {
   return fix(fn(y : Nat) { return n });
 }
 
+
 //SUCCESS

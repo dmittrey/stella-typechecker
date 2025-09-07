@@ -7,5 +7,4 @@ fn main(input : Bool) -> Nat {
   return inl(0)
 }
 
-
 //ERROR_UNEXPECTED_INJECTION

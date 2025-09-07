@@ -5,4 +5,5 @@ fn main(n : &&Nat) -> Nat {
 	return **n
 }
 
+
 //SUCCESS

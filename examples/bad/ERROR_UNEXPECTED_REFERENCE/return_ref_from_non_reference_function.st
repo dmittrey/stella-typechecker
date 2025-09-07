@@ -5,6 +5,4 @@ extend with #references;
 fn main(n : Nat) -> Bool {
 	return new (true)
 }
-
-
 //ERROR_UNEXPECTED_REFERENCE

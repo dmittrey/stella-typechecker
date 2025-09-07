@@ -8,5 +8,4 @@ fn main(n : Nat) -> Nat {
   return fix(true);
 }
 
-
 //ERROR_NOT_A_FUNCTION

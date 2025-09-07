@@ -5,6 +5,4 @@ extend with #structural-patterns, #natural-literals, #variants, #nullary-variant
 fn main(n : Nat) -> <| a : Nat, b, c |> {
   return <| e |>
 }
-
-
 //ERROR_UNEXPECTED_VARIANT_LABEL

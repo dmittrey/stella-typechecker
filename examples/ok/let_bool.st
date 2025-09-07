@@ -8,4 +8,5 @@ fn foo(n : Nat) -> Bool {
 fn main(n : Nat) -> Bool {
   return let t = false in t
 }
+
 //SUCCESS

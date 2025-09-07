@@ -9,6 +9,4 @@ fn seq(_ : auto) -> auto {
 fn main(x : Nat) -> Unit {
 	return seq(seq(seq(unit)(unit))(seq(unit)))(seq(seq(unit)(unit))(seq(unit)(unit)))
 }
-
-
 //ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

@@ -10,5 +10,4 @@ fn main(n : Nat) -> Nat {
   return foo({ fst = 0, snd = true }) // thd is missing
 }
 
-
 //ERROR_MISSING_RECORD_FIELDS

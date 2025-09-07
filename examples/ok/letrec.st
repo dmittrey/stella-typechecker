@@ -9,4 +9,5 @@ fn foo(n : Nat) -> Nat {
 fn main(n : Nat) -> Bool {
     return letrec (x as Bool) = true in x
 }
+
 //SUCCESS

@@ -1,5 +1,5 @@
 language core;
-extend with #exceptions, #exception-type-declaration,#open-variant-exceptions,#variants, #structural-patterns, #open-variant-exceptions;
+extend with #exceptions, #exception-type-declaration, #variants, #structural-patterns, #open-variant-exceptions;
 
 exception variant bool : Bool
 exception variant nat : Nat
@@ -11,4 +11,5 @@ fn fail(n : Nat) -> Bool {
 fn main(n : Nat) -> Bool {
 	return try { true } catch { <| bool = true |> => true }
 }
+
 //SUCCESS

@@ -10,4 +10,5 @@ fn main(arg : Nat) -> Nat {
   return first_or_default([0, 0, 0])
 }
 
+
 //SUCCESS

@@ -7,4 +7,5 @@ fn main(n : Nat) -> Nat {
     	a => 0
    }
 }
+
 //SUCCESS

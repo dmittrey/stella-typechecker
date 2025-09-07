@@ -6,6 +6,4 @@ fn main(x : Nat) -> Nat {
   return
     (fn(x : Nat) { return { { { x, x }, { x, x } }, { { x, Nat::iszero(x) }, { x, x } } } })(0).2.1
 }
-
-
 //ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

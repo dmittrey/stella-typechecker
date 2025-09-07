@@ -21,4 +21,5 @@ fn main(n : [Nat]) -> Nat {
     	| cons (x, xs) => 0
    }
 }
+
 //SUCCESS

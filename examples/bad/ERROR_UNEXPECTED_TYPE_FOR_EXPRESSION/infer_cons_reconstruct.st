@@ -8,6 +8,6 @@ fn foo(a : Nat) -> Nat {
 
 fn main(n : Nat) -> auto {
   return (fn (a : Nat) { return cons(0, [true]); } ) (0)
-}
-
-//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+}//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+\n\n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+/n/n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

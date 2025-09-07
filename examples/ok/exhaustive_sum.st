@@ -8,4 +8,5 @@ fn main(n : Nat + Bool) -> Nat {
     | inr(b) => 0
    }
 }
+
 //SUCCESS

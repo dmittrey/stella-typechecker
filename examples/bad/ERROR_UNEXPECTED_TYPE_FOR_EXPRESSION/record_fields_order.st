@@ -7,6 +7,6 @@ fn foo(succeed : Bool) -> { a : Nat, b : Nat } {
 
 fn main(succeed : Nat) -> { b : Nat, a : Nat } {
   return foo(true)
-}
-
-//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+}//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+\n\n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+/n/n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

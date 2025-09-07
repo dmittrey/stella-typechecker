@@ -7,4 +7,5 @@ fn main(n : Nat) -> Nat {
 	return *foo(0)
 }
 
+
 //SUCCESS

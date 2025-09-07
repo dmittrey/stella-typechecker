@@ -5,4 +5,5 @@ fn main(n : Nat) -> Nat {
 	return (fn(a : Nat) { return unit }) (0); 0
 }
 
+
 //SUCCESS

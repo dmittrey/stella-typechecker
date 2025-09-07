@@ -8,4 +8,5 @@ fn main(n : Nat) -> Nat {
     with
     { 0 }
 }
+
 //SUCCESS

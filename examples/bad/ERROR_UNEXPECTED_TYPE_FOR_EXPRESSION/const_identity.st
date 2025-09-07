@@ -17,6 +17,4 @@ generic fn const[X, Y](x : X) -> fn(Y) -> X {
 fn main(x : Nat) -> Nat {
   return const[Nat, Bool](x)(false)
 }
-
-
 //ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

@@ -8,7 +8,7 @@ fn main(n : Nat) -> Nat {
   }
 
   return if (nested(Nat::iszero(n))) then 0 else succ(0)
-  //return 0
 }
+
 
 //SUCCESS

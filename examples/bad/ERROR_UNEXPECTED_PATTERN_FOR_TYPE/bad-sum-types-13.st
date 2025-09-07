@@ -15,3 +15,5 @@ fn g(x : Nat + (Bool + (fn(Nat) -> Nat))) -> Nat {
 fn main(x : Nat) -> Nat {
   return g(inr(inr(fn(n : Nat) { return g(inl(n)) })))
 }
+
+//ERROR_UNEXPECTED_PATTERN_FOR_TYPE

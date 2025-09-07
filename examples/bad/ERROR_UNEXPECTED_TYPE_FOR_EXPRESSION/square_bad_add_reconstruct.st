@@ -24,6 +24,4 @@ fn square(n : auto) -> auto {
 fn main(n : auto) -> auto {
   return square(n);
 }
-
-
 //ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

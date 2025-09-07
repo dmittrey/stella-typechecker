@@ -38,4 +38,5 @@ fn main(n : Nat) -> Nat {
   return div(n)(n)
 }
 
+
 //SUCCESS

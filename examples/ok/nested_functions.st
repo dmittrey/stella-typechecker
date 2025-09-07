@@ -10,4 +10,5 @@ fn main(n : Nat) -> Nat {
   return if (nested(n)) then 0 else succ(0)
 }
 
+
 //SUCCESS

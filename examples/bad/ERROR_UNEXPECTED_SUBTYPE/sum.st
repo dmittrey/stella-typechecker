@@ -9,6 +9,4 @@ extend with #sum-types,
 fn main(n : Nat) -> Nat + Bool {
   return inr(12)
 }
-
-
 //ERROR_UNEXPECTED_SUBTYPE

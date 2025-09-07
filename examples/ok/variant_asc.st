@@ -9,4 +9,5 @@ fn main(succeed : Bool) -> Nat {
     }
 }
 
+
 //SUCCESS

@@ -14,6 +14,4 @@ fn tuple_gen(n : Nat) -> {Top, Top} {
 fn main(n : Nat) -> {Top, Bool} {
   return tuple_gen(n)
 }
-
-
 //ERROR_UNEXPECTED_SUBTYPE

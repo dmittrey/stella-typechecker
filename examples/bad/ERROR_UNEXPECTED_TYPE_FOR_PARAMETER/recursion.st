@@ -8,6 +8,4 @@ fn main(n : Nat) -> Nat {
              return 0
            } })
 }
-
-
 //ERROR_UNEXPECTED_TYPE_FOR_PARAMETER

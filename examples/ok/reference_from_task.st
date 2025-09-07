@@ -15,4 +15,5 @@ fn main(n : Nat) -> Nat {
   return let ref = new(n) in inc3(ref)
 }
 
+
 //SUCCESS

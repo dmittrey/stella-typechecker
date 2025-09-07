@@ -8,5 +8,4 @@ fn main(n : Nat + Bool) -> auto {
    }
 }
 
-
 //ERROR_NONEXHAUSTIVE_MATCH_PATTERNS

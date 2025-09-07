@@ -8,4 +8,5 @@ fn main(n : <| a : Nat, b : Bool |>) -> Nat {
     | <| b = t |> => 0
    }
 }
+
 //SUCCESS

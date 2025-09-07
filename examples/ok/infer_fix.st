@@ -10,4 +10,5 @@ fn foo(a : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return (fn (a : Nat) { return fix(foo); } ) (0)
 }
+
 //SUCCESS

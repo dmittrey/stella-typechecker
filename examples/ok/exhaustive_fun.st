@@ -7,4 +7,5 @@ fn main(n : (fn(Nat) -> Nat)) -> Nat {
     	a => 0
    }
 }
+
 //SUCCESS

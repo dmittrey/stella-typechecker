@@ -5,5 +5,4 @@ extend with #tuples;
 fn main(n : Nat) -> Nat {
   return {n, succ(n), true}
 }
-
 //ERROR_UNEXPECTED_TUPLE

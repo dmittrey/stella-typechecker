@@ -15,4 +15,5 @@ fn getZero() -> (fn() -> Nat) {
 fn main(n : Nat) -> Nat {
     return getZero()()
 }
+
 //SUCCESS

@@ -9,6 +9,4 @@ fn main(n : Bool) -> Nat {
 
   return if (nested(0)) then 0 else succ(0)
 }
-
-
 //ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

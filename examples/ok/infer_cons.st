@@ -9,4 +9,5 @@ fn foo(a : Nat) -> Nat {
 fn main(n : Nat) -> [Nat] {
   return (fn (a : Nat) { return cons(0, []); } ) (0)
 }
+
 //SUCCESS

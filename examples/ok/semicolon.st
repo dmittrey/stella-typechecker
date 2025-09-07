@@ -4,4 +4,5 @@ fn main(a : Nat) -> Nat {
 return 0;
 }
 
+
 //SUCCESS

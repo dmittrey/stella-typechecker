@@ -12,4 +12,5 @@ fn test(first : Nat + Bool) -> Nat {
 fn main(input : Bool) -> Nat {
   return test(inl(0))
 }
+
 //SUCCESS

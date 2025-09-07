@@ -20,4 +20,5 @@ fn square(n : Nat) -> Nat {
 fn main(n : Nat) -> Nat {
   return square(n)
 }
+
 //SUCCESS

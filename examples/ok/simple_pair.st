@@ -5,4 +5,5 @@ fn main(n : Nat) -> {Nat, Nat} {
   return {succ(n), {succ(succ(n)), n}}.2
 }
 
+
 //SUCCESS

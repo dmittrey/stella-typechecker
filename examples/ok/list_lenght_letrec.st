@@ -16,4 +16,5 @@ fn main(n : Nat) -> Nat {
           }
       ) in let list = cons(0, (cons(0, []))) in length (list)
 }
+
 //SUCCESS

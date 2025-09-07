@@ -9,4 +9,5 @@ fn main(n : Nat) -> Nat {
   return foo(if false then panic! else true)
 }
 
+
 //SUCCESS

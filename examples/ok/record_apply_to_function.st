@@ -9,4 +9,5 @@ fn main(n : Nat) -> Nat {
   return foo({ fst = 0, snd = true, thd = true })
 }
 
+
 //SUCCESS

@@ -9,4 +9,5 @@ fn fail(n : Nat) -> Bool {
 fn main(n : Nat) -> Bool {
 	return try { fail(n) } catch { a => true }
 }
+
 //SUCCESS

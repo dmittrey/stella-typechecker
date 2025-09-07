@@ -8,4 +8,5 @@ fn main(n : Nat) -> Nat {
   return throw(1)
 }
 
+
 //SUCCESS

@@ -5,4 +5,5 @@ exception type = Nat
 fn main(n : Nat) -> Bool {
 	return try { true } catch { 0 => true }
 }
+
 //SUCCESS

@@ -6,6 +6,6 @@ extend with #type-ascriptions;
 
 fn main(n : Nat) -> Bool {
     return List::tail([0] as [Nat])
-}
-
-//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+}//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+\n\n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
+/n/n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

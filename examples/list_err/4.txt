@@ -7,4 +7,4 @@ fn main(_ : Nat) -> [Nat] {
   xs
 }
 
-//ERROR_AMBIGUOUS_LIST
+//ERROR_AMBIGUOUS_LIST_TYPE

@@ -7,6 +7,4 @@ fn foo(n : Nat) -> Nat { return *n }
 fn main(n : Nat) -> Nat {
 	return foo(n)
 }
-
-
-//ERROR_NOT_A_REFERENCE
+//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

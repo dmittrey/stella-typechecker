@@ -10,4 +10,5 @@ fn main(n : Nat) -> Bool {
 	return try { fail(n) } catch { x => true }
 }
 
+
 //SUCCESS

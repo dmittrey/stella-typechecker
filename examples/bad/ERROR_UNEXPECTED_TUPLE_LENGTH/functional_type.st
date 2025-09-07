@@ -11,6 +11,4 @@ fn foo(x : Nat) -> (fn(Nat) -> {Nat, Nat}) {
 fn main(n : Nat) -> {Nat, Nat} {
   return foo(n)(n)
 }
-
-
 //ERROR_UNEXPECTED_TUPLE_LENGTH

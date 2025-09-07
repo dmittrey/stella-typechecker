@@ -16,4 +16,5 @@ fn main(n : Nat) -> Nat {
     | succ(n) => 0
    }
 }
+
 //SUCCESS
