@@ -17,7 +17,7 @@ data MissingMatchCase
     | MissingInl
   deriving (Eq, Ord, Show, Read)
 
--- 6. для расширения #structural-subtyping: нет новых конструкций (но требуется проверка наличия расширения);
+-- NONEXHAU тесты
 
 -- Перейти на do-нотацию
 
