@@ -12,19 +12,19 @@ if [ ! -d "$DIR" ]; then
     exit 1
 fi
 
+total=0
+mismatches=0
+
 for file in "$DIR"/*; do
     if [ -f "$file" ]; then
+        total=$((total+1))
         echo "=== Запуск для файла: $file ==="
 
         output=$(../src/Stella/Main "$file")
 
-        # ожидаемая ошибка из комментария
         expected=$(tail -n 1 "$file" | sed 's#//##' | xargs)
-
-        # нормализованный вывод
         normalized=$(echo "$output" | xargs)
 
-        # если ошибка, берём только код (первые два токена "Type error:" и сам код)
         if [[ "$normalized" == Type\ error:* ]]; then
             actual_code=$(echo "$normalized" | cut -d' ' -f3)
         else
@@ -34,12 +34,11 @@ for file in "$DIR"/*; do
         echo "$output"
 
         if [[ "$expected" == "SUCCESS" && "$normalized" == "Type checking passed!" ]]; then
-            # echo "✅ Совпало: SUCCESS"
             continue
         elif [[ "$normalized" == Type\ error:* && "$expected" == "$actual_code" ]]; then
-            # echo "✅ Совпало: $expected"
             continue
         else
+            mismatches=$((mismatches+1))
             echo "❌ Несовпадение!"
             echo "   Ожидалось: $expected"
             echo "   Получено : $normalized"
@@ -48,3 +47,10 @@ for file in "$DIR"/*; do
         echo
     fi
 done
+
+echo "=== Результат проверки директории $DIR ==="
+echo "Всего файлов   : $total"
+echo "Несовпадений   : $mismatches"
+
+# возвращаем количество несовпадений как exit code для check_all.sh
+exit $mismatches

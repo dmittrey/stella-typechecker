@@ -12,8 +12,11 @@ if [ ! -d "$DIR" ]; then
     exit 1
 fi
 
-# Рекурсивно находим все файлы .st
-find "$DIR" -type f -name "*.st" | while read -r file; do
+mismatches=0
+total=0
+
+# Используем процесс подстановки вместо пайпа, чтобы цикл выполнялся в той же оболочке
+while IFS= read -r file; do
     echo "=== Запуск для файла: $file ==="
 
     output=$(../src/Stella/Main "$file")
@@ -33,15 +36,22 @@ find "$DIR" -type f -name "*.st" | while read -r file; do
 
     echo "$output"
 
+    total=$((total+1))
+
     if [[ "$expected" == "SUCCESS" && "$normalized" == "Type checking passed!" ]]; then
-        continue
+        :
     elif [[ "$normalized" == Type\ error:* && "$expected" == "$actual_code" ]]; then
-        continue
+        :
     else
+        mismatches=$((mismatches+1))
         echo "❌ Несовпадение!"
         echo "   Ожидалось: $expected"
         echo "   Получено : $normalized"
     fi
 
     echo
-done
+done < <(find "$DIR" -type f -name "*.st")
+
+echo "=== Результат проверки ==="
+echo "Всего файлов: $total"
+echo "Несовпадений: $mismatches"

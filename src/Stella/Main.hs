@@ -16,14 +16,16 @@ import Stella.TypeCheck
 -- Мне по суи нужно сначала найти какой тип декларации, если тип декларации useExnTypeDecl, то обходим такие декларации и 
 typeCheck :: Program -> IO ()
 typeCheck (AProgram _ exts decls) =
-    let exnCtx = if useExnTypeDecl
-        then foldl stepExnTypeDecl ExnTypeNotDeclared decls
-        else if useOpenVariantExn
-            then foldl stepOpenVariantExn ExnTypeNotDeclared decls
-            else ExnTypeNotDeclared
+    let exnCtx0 = if useExnTypeDecl
+                then foldl stepExnTypeDecl ExnTypeNotDeclared decls
+                else ExnTypeNotDeclared
+        exnCtx  = if useOpenVariantExn
+                then foldl stepOpenVariantExn exnCtx0 decls
+                else exnCtx0
+
     in
         -- putStrLn $ "Type error: " ++ show exnCtx
-        case (foldl stepCheck (CheckOk, Env { envVars = [], envExn = exnCtx, isAmbTyAsBot = useAmbTyAsBot }) decls) of
+        case (foldl stepCheck (CheckOk, Env { envVars = [], envExn = exnCtx, isAmbTyAsBot = useAmbTyAsBot, isSubtyping = useSubtyping }) decls) of
             ((CheckErr err), env) -> putStrLn $ "Type error: " ++ show err
             (CheckOk, env) -> 
                 case lookup (StellaIdent "main") (envVars env) of
@@ -42,6 +44,9 @@ typeCheck (AProgram _ exts decls) =
 
     useAmbTyAsBot :: Bool
     useAmbTyAsBot = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#ambiguous-type-as-bottom") ns) exts
+
+    useSubtyping :: Bool
+    useSubtyping = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#structural-subtyping") ns) exts
 
     stepExnTypeDecl :: ExnCtx -> Decl -> ExnCtx
     stepExnTypeDecl _ (DeclExceptionType ty) = ExnTypeDecl ty
