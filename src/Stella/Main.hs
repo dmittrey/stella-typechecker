@@ -10,7 +10,9 @@ import Stella.Abs
 import Stella.Par
 import Stella.ErrM
 
-import Stella.TypeCheck
+import Stella.TypeCheck.TypeCheck
+import Stella.TypeCheck.Error
+import Stella.TypeCheck.Context
 
 
 -- Мне по суи нужно сначала найти какой тип декларации, если тип декларации useExnTypeDecl, то обходим такие декларации и 
@@ -48,11 +50,11 @@ typeCheck (AProgram _ exts decls) =
     useSubtyping :: Bool
     useSubtyping = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#structural-subtyping") ns) exts
 
-    stepExnTypeDecl :: ExnCtx -> Decl -> ExnCtx
+    stepExnTypeDecl :: ExceptionContext -> Decl -> ExceptionContext
     stepExnTypeDecl _ (DeclExceptionType ty) = ExnTypeDecl ty
     stepExnTypeDecl ctx _ = ctx
 
-    stepOpenVariantExn :: ExnCtx -> Decl -> ExnCtx
+    stepOpenVariantExn :: ExceptionContext -> Decl -> ExceptionContext
     stepOpenVariantExn (ExnOpenVariant variants) (DeclExceptionVariant ident ty) = 
         ExnOpenVariant ((AVariantFieldType ident (SomeTyping ty)) : variants)
     stepOpenVariantExn (ExnTypeNotDeclared) (DeclExceptionVariant ident ty) = 

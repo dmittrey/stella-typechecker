@@ -1,8 +1,0 @@
-language core;
-extend with #let-bindings;
-
-fn main(n : Nat) -> Nat {
-  return let t = true in t
-}//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
-\n\n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION
-/n/n//ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION

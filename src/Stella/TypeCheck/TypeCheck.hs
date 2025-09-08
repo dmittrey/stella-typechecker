@@ -1,6 +1,10 @@
 {-# LANGUAGE PatternSynonyms #-}
 
-module Stella.TypeCheck where
+module Stella.TypeCheck.TypeCheck where
+
+import Stella.TypeCheck.Error
+import Stella.TypeCheck.Context
+import Stella.TypeCheck.Subsumption
 
 import Stella.Abs
 import Stella.ErrM
@@ -12,117 +16,9 @@ import Data.Maybe
 import Data.List
 import Prelude
 
-data MissingMatchCase
-    = MissingInr
-    | MissingInl
-  deriving (Eq, Ord, Show, Read)
-
--- NONEXHAU тесты
-
+-- TODO:
 -- Перейти на do-нотацию
-
 -- CI
-
--- Типы ошибок
-data CErrType
-    = ERROR_DECL_CHECK_NOT_IMPLEMENTED Decl
-    | ERROR_EXPR_CHECK_NOT_IMPLEMENTED Expr Type
-    | ERROR_EXPR_INFER_NOT_IMPLEMENTED Expr
-    | ERROR_PATTERN_NOT_SUPPORTED Pattern Type
-    | ERROR_MATCH_NOT_SUPPORTED Type
-
-    | ERROR_AMBIGUOUS_PATTERN_TYPE Pattern
-    | ERROR_MISSING_MAIN
-    | ERROR_UNDEFINED_VARIABLE StellaIdent
-    | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Expr Type Type -- Expr Expected Got
-    | ERROR_NOT_A_FUNCTION Expr
-    | ERROR_NOT_A_TUPLE Expr
-    | ERROR_NOT_A_RECORD Expr
-    | ERROR_UNEXPECTED_LAMBDA Expr Type
-    | ERROR_UNEXPECTED_TYPE_FOR_PARAMETER StellaIdent Type Type -- Ident Expected Got
-    | ERROR_UNEXPECTED_TUPLE Expr Type
-    | ERROR_UNEXPECTED_RECORD Expr Type
-    | ERROR_UNEXPECTED_VARIANT
-    | ERROR_UNEXPECTED_LIST Expr
-    | ERROR_UNEXPECTED_INJECTION Expr
-    | ERROR_MISSING_RECORD_FIELDS
-    | ERROR_UNEXPECTED_RECORD_FIELDS
-    | ERROR_UNEXPECTED_FIELD_ACCESS Expr StellaIdent
-    | ERROR_UNEXPECTED_VARIANT_LABEL StellaIdent
-    | ERROR_TUPLE_INDEX_OUT_OF_BOUNDS Expr Integer
-    | ERROR_UNEXPECTED_TUPLE_LENGTH
-    | ERROR_AMBIGUOUS_SUM_TYPE Expr
-    | ERROR_AMBIGUOUS_VARIANT_TYPE Expr
-    | ERROR_AMBIGUOUS_LIST_TYPE
-    | ERROR_NOT_A_LIST Type
-    | ERROR_ILLEGAL_EMPTY_MATCHING
-    | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS MatchErrType
-    | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Type
-    | ERROR_DUPLICATE_RECORD_FIELDS
-    | ERROR_DUPLICATE_RECORD_TYPE_FIELDS
-    | ERROR_DUPLICATE_VARIANT_TYPE_FIELDS Type
-    | ERROR_INCORRECT_ARITY_OF_MAIN
-    | ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
-    | ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA
-    | ERROR_UNEXPECTED_DATA_FOR_NULLARY_LABEL
-    | ERROR_MISSING_DATA_FOR_LABEL
-    | ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
-    | ERROR_UNEXPECTED_NULLARY_VARIANT_PATTERN
-    | ERROR_NOT_A_REFERENCE Expr
-    | ERROR_UNEXPECTED_MEMORY_ADDRESS String
-    | ERROR_AMBIGUOUS_REFERENCE_TYPE
-    | ERROR_AMBIGUOUS_PANIC_TYPE
-    | ERROR_EXCEPTION_TYPE_NOT_DECLARED Expr
-    | ERROR_AMBIGUOUS_THROW_TYPE
-    | ERROR_UNEXPECTED_SUBTYPE Type Type -- SubType Type
-    | ERROR_UNEXPECTED_REFERENCE
-    | DEBUG Type
-  deriving (Eq, Ord, Show, Read)
-
--- Контекст типов ошибок
-data ExnCtx 
-    = ExnTypeNotDeclared
-    | ExnTypeDecl Type
-    | ExnOpenVariant [VariantFieldType]
-  deriving (Show, Eq)
-
--- Окружение: имя переменной → её тип + общий контекст ошибок
-data Env = Env
-    { envVars :: [(StellaIdent, Type)]
-    , envExn  :: ExnCtx
-    , isAmbTyAsBot :: Bool
-    , isSubtyping :: Bool
-    }
-    deriving (Show, Eq)
-
-emptyEnv :: Env
-emptyEnv = Env { envVars = [], envExn = ExnTypeNotDeclared, isAmbTyAsBot = False, isSubtyping = False }
-
--- Результат проверки против типа
-type CheckResult = Either CErrType ()
-
-pattern CheckOk :: CheckResult
-pattern CheckOk = Right ()
-
-pattern CheckErr :: CErrType -> CheckResult
-pattern CheckErr e = Left e
-
--- Композиция проверок
-(>>>) :: CheckResult -> CheckResult -> CheckResult
-CheckOk      >>> r = r
-CheckErr err >>> _ = CheckErr err
-
-updateEnvByParams :: Env -> [ParamDecl] -> Env
-updateEnvByParams env params =
-    env { envVars = envVars env ++ [(ident, t) | AParamDecl ident t <- params] }
-
-checkArgs :: Env -> [Expr] -> [Type] -> CheckResult
-checkArgs _   []     []     = CheckOk
-checkArgs _   []     _      = CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
-checkArgs _   _      []     = CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
-checkArgs env (e:es) (ty:tys) =
-  exprCheck env e ty
-  >>> checkArgs env es tys
 
 -- Core, #nested-function-declarations, #nullary-functions
 declCheck :: Env -> Decl -> (CheckResult, Env)
@@ -1168,20 +1064,6 @@ checkMatchCases env cases (TypeTuple tys) tyC =
 checkMatchCases env cases ty tyC =
     checkMatchCasesGeneric env cases ty tyC
 
-data MatchErrType 
-    = NotSeenZero
-    | NotSeenSucc
-    | NotSeenTrue
-    | NotSeenFalse
-    | NotSeenLeftInjection
-    | NotSeenRightInjection
-    | NotSeenAllLabels
-    | NotSeenEmptyList
-    | NotSeenConsList
-    | NotSeenAllTuple
-    | NotSeenAllRecord
-  deriving (Eq, Ord, Show, Read)
-
 checkMatchCasesTuple :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesTuple env cases t@(TypeTuple tys) tyC =
     go cases False
@@ -1192,27 +1074,33 @@ checkMatchCasesTuple env cases t@(TypeTuple tys) tyC =
 
     go (AMatchCase pat expr : rest) seenAll =
         case pat of
-          PatternTuple ps ->
-              if length ps /= length tys
-              then CheckErr ERROR_UNEXPECTED_TUPLE_LENGTH
+          PatternTuple pats ->
+              if length pats /= length tys
+              then CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
               else
-                let res = foldl (>>>) CheckOk
-                            [ checkMatchCases env [AMatchCase p expr] ty tyC
-                            | (p,ty) <- zip ps tys ]
-                in res >>> go rest True
-          PatternVar ident ->
-              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
-              in res >>> go rest True
+                case bindAll env pats tys of
+                  InferErr err  -> CheckErr err
+                  InferOk env'  -> exprCheck env' expr tyC >>> go rest True
+
+          PatternVar _ ->
+              bindPattern env pat t >>= \env' -> exprCheck env' expr tyC >>> go rest True
+
           _ ->
-              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
-              in res >>> go rest False
+              bindPattern env pat t >>= \env' -> exprCheck env' expr tyC >>> go rest False
+
+    -- bindAll: последовательно привязывает список паттернов к списку типов
+    bindAll :: Env -> [Pattern] -> [Type] -> InferResult Env
+    bindAll e [] [] = InferOk e
+    bindAll e (p:ps) (ty:tys') =
+        bindPattern e p ty >>= \e' -> bindAll e' ps tys'
+    bindAll _ _ _ = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeTuple tys))
 
 
 checkMatchCasesRecord :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesRecord env cases t@(TypeRecord fields) tyC =
     go cases False
   where
-    fieldMap = Map.fromList [(ident, ty) | ARecordFieldType ident ty <- fields]
+    identToType = [(i, ty) | ARecordFieldType i ty <- fields]
 
     go [] seenAll
       | not seenAll = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenAllRecord)
@@ -1221,21 +1109,24 @@ checkMatchCasesRecord env cases t@(TypeRecord fields) tyC =
     go (AMatchCase pat expr : rest) seenAll =
         case pat of
           PatternRecord pats ->
-              let patMap = Map.fromList pats
-              in if Map.keysSet patMap /= Map.keysSet fieldMap
-                 then CheckErr ERROR_INCOMPLETE_RECORD_PATTERN
-                 else
-                   let res = foldl (>>>) CheckOk
-                               [ checkMatchCases env [AMatchCase p expr] ty tyC
-                               | (ident,p) <- pats
-                               , Just ty <- [Map.lookup ident fieldMap] ]
-                   in res >>> go rest True
+              let checkAll [] = CheckOk
+                  checkAll (ALabelledPattern ident identPat : ps) =
+                    case lookup ident identToType of
+                      Just ty ->
+                        checkMatchCases env [AMatchCase identPat expr] ty tyC >>> checkAll ps
+                      Nothing ->
+                        CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE t)
+                  res = checkAll pats
+              in res >>> go rest True
+
           PatternVar ident ->
               let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
               in res >>> go rest True
+
           _ ->
               let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
               in res >>> go rest False
+
 
 
 checkMatchCasesSum :: Env -> [MatchCase] -> Type -> Type -> CheckResult
@@ -1285,7 +1176,8 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
                     SomePatternData pat1 ->
                         case lookupVariantField ident fields of
                             VariantFieldExistSomeType ty ->
-                                let res = checkMatchCases env [(AMatchCase pat1 expr)] ty tyC
+                                -- let res = checkMatchCases env [(AMatchCase pat1 expr)] ty tyC
+                                let res = bindPattern env pat1 ty >>= \env' -> exprCheck env' expr tyC
                                 in res >>> go rest (Map.insert ident True seenMap)
                             VariantFieldExistNoType ->
                                 CheckErr ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
@@ -1520,45 +1412,6 @@ lookupVariantField ident fields =
             Just (NoTyping)         -> VariantFieldExistNoType
             Nothing                 -> VariantFieldMissing
 
--- | Подтипизация
-(<:) :: Type -> Type -> Bool
--- Top / Bottom
-_ <: TypeTop = True
-TypeBottom <: _ = True
--- Bool / Nat / Unit
-TypeBool <: TypeBool = True
-TypeNat  <: TypeNat  = True
-TypeUnit <: TypeUnit = True
--- Суммы: ковариантность по каждому элементу
-TypeSum l1 l2 <: TypeSum r1 r2 = (l1 <: r1) && (l2 <: r2)
--- Функции: контравариантность аргументов, ковариантность результата
-TypeFun lParams lRet <: TypeFun rParams rRet =
-    length lParams == length rParams &&
-    and [ rTy <: lTy | (lTy,rTy) <- zip lParams rParams ] &&  -- контравариантность аргументов
-    lRet <: rRet                                              -- ковариантность результата
--- Рекорды: подтип может иметь больше полей
-TypeRecord lFields <: TypeRecord rFields =
-    let lMap = Map.fromList [(name, ty) | ARecordFieldType name ty <- lFields]
-        rMap = Map.fromList [(name, ty) | ARecordFieldType name ty <- rFields]
-    in Set.fromList (Map.keys rMap) `Set.isSubsetOf` Set.fromList (Map.keys lMap) &&
-       all (\(k,rTy) -> case Map.lookup k lMap of
-                          Just lTy -> lTy <: rTy
-                          Nothing  -> False) (Map.toList rMap)
--- Варианты: подтип может иметь меньше конструкторов
-TypeVariant lFields <: TypeVariant rFields =
-    let lMap = Map.fromList [(name, ty) | AVariantFieldType name tyOpt <- lFields, SomeTyping ty <- [tyOpt]]
-        rMap = Map.fromList [(name, ty) | AVariantFieldType name tyOpt <- rFields, SomeTyping ty <- [tyOpt]]
-        -- Игнорируем nullary конструкторы (NoTyping) при сравнении
-    in Set.fromList (Map.keys lMap) `Set.isSubsetOf` Set.fromList (Map.keys rMap) &&
-       all (\(k,lTy) -> case Map.lookup k rMap of
-                          Just rTy -> lTy <: rTy
-                          Nothing  -> False) (Map.toList lMap)
--- Списки и ссылки ковариантны
-TypeList lTy <: TypeList rTy = lTy <: rTy
-TypeRef lTy  <: TypeRef rTy  = lTy <: rTy
--- Иначе
-_ <: _ = False
-
 -- | Проверка параметров для функций с подтипированием
 checkParams :: Env -> [ParamDecl] -> [Type] -> (CheckResult, Env)
 checkParams env [] [] = (CheckOk, env)
@@ -1575,3 +1428,15 @@ checkParams env ((AParamDecl ident actualTy):ps) (ty:tys)
         (CheckErr (ERROR_UNEXPECTED_SUBTYPE ty actualTy), env)
     | otherwise =
         (CheckErr (ERROR_UNEXPECTED_TYPE_FOR_PARAMETER ident ty actualTy), env)
+
+updateEnvByParams :: Env -> [ParamDecl] -> Env
+updateEnvByParams env params =
+    env { envVars = envVars env ++ [(ident, t) | AParamDecl ident t <- params] }
+
+checkArgs :: Env -> [Expr] -> [Type] -> CheckResult
+checkArgs _   []     []     = CheckOk
+checkArgs _   []     _      = CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
+checkArgs _   _      []     = CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
+checkArgs env (e:es) (ty:tys) =
+  exprCheck env e ty
+  >>> checkArgs env es tys
