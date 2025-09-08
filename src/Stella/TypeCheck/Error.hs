@@ -1,6 +1,33 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module Stella.TypeCheck.Error where
 
 import Stella.Abs
+
+instance MonadFail (Either CErrType) where
+    fail _ = Left MONAD_FAIL_NOT_GUARDED_IM_BEGINNING_SORRY
+
+-- Результат проверки против типа
+type CheckResult = Either CErrType ()
+
+pattern CheckOk :: CheckResult
+pattern CheckOk = Right ()
+
+pattern CheckErr :: CErrType -> CheckResult
+pattern CheckErr e = Left e
+
+(>>>) :: CheckResult -> CheckResult -> CheckResult
+CheckOk >>> r = r
+CheckErr e >>> _ = CheckErr e
+
+-- Результат вывода чего-то
+type InferResult = Either CErrType
+
+pattern InferOk :: a -> InferResult a
+pattern InferOk x = Right x
+
+pattern InferErr :: CErrType -> InferResult a
+pattern InferErr e = Left e
 
 -- Тип ошибок для Pattern Matching
 data MatchErrType 
@@ -25,6 +52,7 @@ data CErrType
     | ERROR_EXPR_INFER_NOT_IMPLEMENTED Expr
     | ERROR_PATTERN_NOT_SUPPORTED Pattern Type
     | ERROR_MATCH_NOT_SUPPORTED Type
+    | MONAD_FAIL_NOT_GUARDED_IM_BEGINNING_SORRY
 
     -- Требуемые ошибки
     | ERROR_AMBIGUOUS_PATTERN_TYPE Pattern
@@ -52,7 +80,7 @@ data CErrType
     | ERROR_AMBIGUOUS_LIST_TYPE
     | ERROR_NOT_A_LIST Type
     | ERROR_ILLEGAL_EMPTY_MATCHING
-    | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS MatchErrType
+    | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase]
     | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Type
     | ERROR_DUPLICATE_RECORD_FIELDS
     | ERROR_DUPLICATE_RECORD_TYPE_FIELDS

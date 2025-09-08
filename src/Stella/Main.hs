@@ -10,9 +10,10 @@ import Stella.Abs
 import Stella.Par
 import Stella.ErrM
 
-import Stella.TypeCheck.TypeCheck
+import Stella.TypeCheck.Core
 import Stella.TypeCheck.Error
 import Stella.TypeCheck.Context
+import Stella.TypeCheck.CheckInfer
 
 
 -- Мне по суи нужно сначала найти какой тип декларации, если тип декларации useExnTypeDecl, то обходим такие декларации и 

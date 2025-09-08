@@ -16,10 +16,9 @@ TypeBottom <: _ = True
 -- ====== S-Sum (ковариантность по каждому элементу) ======
 TypeSum l1 l2 <: TypeSum r1 r2 = (l1 <: r1) && (l2 <: r2)
 
--- ====== S-Tuple (ковариантность по каждому элементу) ======
+-- ====== S-Tuple ======
 TypeTuple lTys <: TypeTuple rTys =
-    length lTys == length rTys &&
-    and [ lTy <: rTy | (lTy, rTy) <- zip lTys rTys ]
+    all (\lTy -> any (\rTy -> lTy <: rTy) rTys) lTys
 
 -- ====== S-Arrow ======
 TypeFun lParams lRet <: TypeFun rParams rRet =
@@ -28,17 +27,18 @@ TypeFun lParams lRet <: TypeFun rParams rRet =
     lRet <: rRet                                               -- ковариантность результата
 
 -- ====== S-Record ======
+-- {current : Nat, next : Nat} <: {current : Nat}
 TypeRecord lFields <: TypeRecord rFields =
     let lMap = Map.fromList [(name, ty) | ARecordFieldType name ty <- lFields]
         rMap = Map.fromList [(name, ty) | ARecordFieldType name ty <- rFields]
     in 
         -- S-RecordWidth
-        Map.keysSet lMap `Set.isSubsetOf` Map.keysSet rMap &&
+        Map.keysSet rMap `Set.isSubsetOf` Map.keysSet lMap &&
         -- S-RecordDepth
-        all (\(k,lTy) -> 
-                case Map.lookup k rMap of
-                    Just rTy -> lTy <: rTy
-                    Nothing  -> False) (Map.toList lMap)
+        all (\(k,rTy) -> 
+                case Map.lookup k lMap of
+                    Just lTy -> lTy <: rTy
+                    Nothing  -> False) (Map.toList rMap)
 
 -- ====== S-Variant ======
 TypeVariant lFields <: TypeVariant rFields =

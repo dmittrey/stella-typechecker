@@ -1,0 +1,15 @@
+language core;
+extend with #natural-literals,#pattern-ascriptions,#let-patterns,#letrec-bindings,#structural-patterns,#fixpoint-combinator;
+
+fn main(_ : Nat) -> Nat {
+  return letrec fact = fn (n : Nat) {
+      return match n {
+        0 => 1
+      | succ(m) => fact(m)
+      }
+    }
+  in
+    fact(5)
+}
+
+//ERROR_AMBIGUOUS_PATTERN_TYPE
