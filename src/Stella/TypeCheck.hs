@@ -56,7 +56,7 @@ data CErrType
     | ERROR_AMBIGUOUS_LIST_TYPE
     | ERROR_NOT_A_LIST Type
     | ERROR_ILLEGAL_EMPTY_MATCHING
-    | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS [MatchCase]
+    | ERROR_NONEXHAUSTIVE_MATCH_PATTERNS MatchErrType
     | ERROR_UNEXPECTED_PATTERN_FOR_TYPE Type
     | ERROR_DUPLICATE_RECORD_FIELDS
     | ERROR_DUPLICATE_RECORD_TYPE_FIELDS
@@ -1152,29 +1152,114 @@ checkMatchCases env cases TypeBool tyC =
 checkMatchCases env cases TypeNat tyC =
     checkMatchCasesNat env cases tyC
 
+-- TypeList
+checkMatchCases env cases (TypeList ty) tyC =
+    checkMatchCasesList env cases (TypeList ty) tyC
+
+-- TypeRecord
+checkMatchCases env cases (TypeRecord fields) tyC =
+    checkMatchCasesRecord env cases (TypeRecord fields) tyC
+
+-- TypeList
+checkMatchCases env cases (TypeTuple tys) tyC =
+    checkMatchCasesTuple env cases (TypeTuple tys) tyC
+
 -- Fallback
 checkMatchCases env cases ty tyC =
     checkMatchCasesGeneric env cases ty tyC
+
+data MatchErrType 
+    = NotSeenZero
+    | NotSeenSucc
+    | NotSeenTrue
+    | NotSeenFalse
+    | NotSeenLeftInjection
+    | NotSeenRightInjection
+    | NotSeenAllLabels
+    | NotSeenEmptyList
+    | NotSeenConsList
+    | NotSeenAllTuple
+    | NotSeenAllRecord
+  deriving (Eq, Ord, Show, Read)
+
+checkMatchCasesTuple :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesTuple env cases t@(TypeTuple tys) tyC =
+    go cases False
+  where
+    go [] seenAll
+      | not seenAll = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenAllTuple)
+      | otherwise   = CheckOk
+
+    go (AMatchCase pat expr : rest) seenAll =
+        case pat of
+          PatternTuple ps ->
+              if length ps /= length tys
+              then CheckErr ERROR_UNEXPECTED_TUPLE_LENGTH
+              else
+                let res = foldl (>>>) CheckOk
+                            [ checkMatchCases env [AMatchCase p expr] ty tyC
+                            | (p,ty) <- zip ps tys ]
+                in res >>> go rest True
+          PatternVar ident ->
+              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
+              in res >>> go rest True
+          _ ->
+              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
+              in res >>> go rest False
+
+
+checkMatchCasesRecord :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesRecord env cases t@(TypeRecord fields) tyC =
+    go cases False
+  where
+    fieldMap = Map.fromList [(ident, ty) | ARecordFieldType ident ty <- fields]
+
+    go [] seenAll
+      | not seenAll = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenAllRecord)
+      | otherwise   = CheckOk
+
+    go (AMatchCase pat expr : rest) seenAll =
+        case pat of
+          PatternRecord pats ->
+              let patMap = Map.fromList pats
+              in if Map.keysSet patMap /= Map.keysSet fieldMap
+                 then CheckErr ERROR_INCOMPLETE_RECORD_PATTERN
+                 else
+                   let res = foldl (>>>) CheckOk
+                               [ checkMatchCases env [AMatchCase p expr] ty tyC
+                               | (ident,p) <- pats
+                               , Just ty <- [Map.lookup ident fieldMap] ]
+                   in res >>> go rest True
+          PatternVar ident ->
+              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
+              in res >>> go rest True
+          _ ->
+              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
+              in res >>> go rest False
+
 
 checkMatchCasesSum :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesSum env cases t@(TypeSum tl tr) tyC =
     go cases False False
   where
     go [] seenL seenR
-      | not seenL = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
-      | not seenR = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not seenL = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenLeftInjection)
+      | not seenR = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenRightInjection)
       | otherwise = CheckOk
     go (AMatchCase pat expr : rest) seenL seenR =
         case pat of
           PatternInl pl ->
-              let res = bindPattern env pl tl >>= \envL -> exprCheck envL expr tyC
+              let res = checkMatchCases env [(AMatchCase pl expr)] tl tyC
               in res >>> go rest True seenR
           PatternInr pr ->
-              let res = bindPattern env pr tr >>= \envR -> exprCheck envR expr tyC
+              let res = checkMatchCases env [(AMatchCase pr expr)] tr tyC
               in res >>> go rest seenL True
-          _ ->
+          PatternVar ident ->
               let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
               in res >>> go rest True True
+          _ ->
+              let res = bindPattern env pat t >>= \env' -> exprCheck env' expr tyC
+              in res >>> go rest False False
 
 checkMatchCasesVariant :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesVariant env cases (TypeVariant fields) tyC =
@@ -1183,7 +1268,7 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
     go cases initialMap
   where
     go [] seenMap
-      | not (all id (Map.elems seenMap)) = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not (all id (Map.elems seenMap)) = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenAllLabels)
       | otherwise                        = CheckOk
     go (AMatchCase pat expr : rest) seenMap =
         case pat of
@@ -1197,27 +1282,31 @@ checkMatchCasesVariant env cases (TypeVariant fields) tyC =
                                 exprCheck env expr tyC >>> go rest (Map.insert ident True seenMap)
                             VariantFieldMissing ->
                                 CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
-                    SomePatternData pat ->
+                    SomePatternData pat1 ->
                         case lookupVariantField ident fields of
                             VariantFieldExistSomeType ty ->
-                                let res = bindPattern env pat ty >>= \env' -> exprCheck env' expr tyC
+                                let res = checkMatchCases env [(AMatchCase pat1 expr)] ty tyC
                                 in res >>> go rest (Map.insert ident True seenMap)
                             VariantFieldExistNoType ->
                                 CheckErr ERROR_UNEXPECTED_NON_NULLARY_VARIANT_PATTERN
                             VariantFieldMissing ->
                                 CheckErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE (TypeVariant fields))
-            _ ->
+            PatternVar ident ->
                 let res = bindPattern env pat (TypeVariant fields) >>= \env' -> exprCheck env' expr tyC
                     allTrue = Map.map (const True) seenMap
                 in res >>> go rest allTrue
+            _ ->
+                let res = bindPattern env pat (TypeVariant fields) >>= \env' -> exprCheck env' expr tyC
+                    -- allTrue = Map.map (const True) seenMap
+                in res >>> go rest seenMap
 
 checkMatchCasesBool :: Env -> [MatchCase] -> Type -> CheckResult
 checkMatchCasesBool env cases tyC =
     go cases False False
   where
     go [] seenTrue seenFalse
-      | not seenTrue  = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
-      | not seenFalse = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not seenTrue  = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenTrue)
+      | not seenFalse = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenFalse)
       | otherwise     = CheckOk
 
     go (AMatchCase pat expr : rest) seenTrue seenFalse =
@@ -1226,31 +1315,61 @@ checkMatchCasesBool env cases tyC =
             exprCheck env expr tyC >>> go rest True seenFalse
         PatternFalse ->
             exprCheck env expr tyC >>> go rest seenTrue True
-        _ ->
+        PatternVar ident ->
             let res = bindPattern env pat TypeBool >>= \env' -> exprCheck env' expr tyC
             in res >>> go rest True True
+        _ ->
+            let res = bindPattern env pat TypeBool >>= \env' -> exprCheck env' expr tyC
+            in res >>> go rest False False
 
 checkMatchCasesNat :: Env -> [MatchCase] -> Type -> CheckResult
 checkMatchCasesNat env cases tyC =
     go cases False False
   where
     go [] seenZero seenSucc
-      | not seenZero = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
-      | not seenSucc = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not seenZero = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenZero)
+      | not seenSucc = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenSucc)
       | otherwise    = CheckOk
 
     go (AMatchCase pat expr : rest) seenZero seenSucc =
       case pat of
         PatternInt 0 ->
           exprCheck env expr tyC >>> go rest True seenSucc
-        PatternSucc p ->
-          case bindPattern env p TypeNat of
-            InferErr err -> CheckErr err
-            InferOk env' ->
-              exprCheck env' expr tyC >>> go rest seenZero True
-        _ ->
+        PatternSucc (PatternInt n) ->
+          exprCheck env expr tyC >>> go rest seenZero seenSucc
+        PatternVar ident ->
           let res = bindPattern env pat TypeNat >>= \env' -> exprCheck env' expr tyC
           in res >>> go rest True True
+        PatternSucc (PatternVar ident) ->
+          let res = bindPattern env (PatternVar ident) TypeNat >>= \env' -> exprCheck env' expr tyC
+          in res >>> go rest seenZero True
+        _ ->
+          let res = bindPattern env pat TypeNat >>= \env' -> exprCheck env' expr tyC
+          in res >>> go rest False False
+
+checkMatchCasesList :: Env -> [MatchCase] -> Type -> Type -> CheckResult
+checkMatchCasesList env cases (TypeList ty) tyC =
+    go cases False False
+  where
+    go [] emptyList consList
+      | not emptyList = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenEmptyList)
+      | not consList = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS NotSeenConsList)
+      | otherwise    = CheckOk
+
+    go (AMatchCase pat expr : rest) emptyList consList =
+      case pat of
+        PatternList [] ->
+            exprCheck env expr tyC >>> go rest True consList
+        PatternCons patH patTail -> -- Nat List
+            let res = checkMatchCases env [(AMatchCase patH expr)] ty tyC
+                      >>> checkMatchCases env [(AMatchCase patTail expr)] (TypeList ty) tyC
+            in res >>> go rest emptyList True
+        PatternVar ident ->
+            let res = bindPattern env pat (TypeList ty) >>= \env' -> exprCheck env' expr tyC
+            in res >>> go rest True True
+        _ ->
+          let res = bindPattern env pat (TypeList ty) >>= \env' -> exprCheck env' expr tyC
+          in res >>> go rest False False
 
 checkMatchCasesGeneric :: Env -> [MatchCase] -> Type -> Type -> CheckResult
 checkMatchCasesGeneric env cases ty tyC =
