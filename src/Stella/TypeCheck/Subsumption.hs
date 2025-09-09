@@ -70,8 +70,7 @@ TypeList lTy <: TypeList rTy = lTy <: rTy
 TypeRef lTy <: TypeRef rTy  = lTy <: rTy
 
 -- ====== S-Refl ======
-t1 <: t2
-    | t2 == t2 = True
+t1 <: t2 | t1 == t2 = True
 
 -- Fallback
 _ <: _ = False

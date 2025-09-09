@@ -17,6 +17,8 @@ import Control.Monad (foldM)
 exprCheckConst :: Env -> Expr -> Type -> Type -> CheckResult
 exprCheckConst _ _ (TypeTuple lTys) (TypeTuple rTys)
     | length lTys /= length rTys    = CheckErr ERROR_UNEXPECTED_TUPLE_LENGTH
+exprCheckConst _ _ (TypeFun lp lr) (TypeFun rp rr)
+    | length lp /= length rp    = CheckErr ERROR_INCORRECT_NUMBER_OF_ARGUMENTS
 exprCheckConst env expr actualTy expectedTy
     | (<:=) env actualTy expectedTy = CheckOk
     | isSubtyping env               = CheckErr (ERROR_UNEXPECTED_SUBTYPE actualTy expectedTy)
