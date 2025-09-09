@@ -817,17 +817,23 @@ checkMatchCasesNat :: Env -> [MatchCase] -> Type -> CheckResult
 checkMatchCasesNat env cases tyC =
     go cases False False
   where
-    go [] seenTrue seenFalse
-      | not seenTrue  = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
-      | not seenFalse = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+    go [] seenZero seenSucc
+      | not seenZero  = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
+      | not seenSucc = CheckErr (ERROR_NONEXHAUSTIVE_MATCH_PATTERNS cases)
       | otherwise     = CheckOk
 
-    go (AMatchCase pat expr : rest) seenTrue seenFalse =
+    go (AMatchCase pat expr : rest) seenZero seenSucc =
       case pat of
-        PatternTrue  ->
-            exprCheck env expr tyC >>> go rest True seenFalse
-        PatternFalse ->
-            exprCheck env expr tyC >>> go rest seenTrue True
+        PatternInt 0  ->
+            exprCheck env expr tyC >>> go rest True seenSucc
+        PatternSucc(PatternInt 0) ->
+            exprCheck env expr tyC >>> go rest seenZero seenSucc
+        PatternSucc(PatternVar a) ->
+            let res = bindPattern env (PatternVar a) TypeNat >>= \env' -> exprCheck env' expr tyC
+            in res >>> go rest seenZero True
+        PatternVar a ->
+            let res = bindPattern env pat TypeBool >>= \env' -> exprCheck env' expr tyC
+            in res >>> go rest True True
         _ ->
             let res = bindPattern env pat TypeBool >>= \env' -> exprCheck env' expr tyC
             in res >>> go rest False False
@@ -859,7 +865,7 @@ checkParams :: Env -> [ParamDecl] -> [Type] -> (CheckResult, Env)
 checkParams env [] [] = (CheckOk, env)
 checkParams env (AParamDecl ident actualTy : ps) (ty : tys)
     | length ps /= length tys = (CheckErr ERROR_UNEXPECTED_NUMBER_OF_PARAMETERS_IN_LAMBDA, env)
-    | (<:=) env actualTy ty =
+    | (<:=) env ty actualTy =
         let newEnv = env { envVars = (ident, ty) : envVars env }
         in case checkParams newEnv ps tys of
             (CheckOk, env') -> (CheckOk, env')
