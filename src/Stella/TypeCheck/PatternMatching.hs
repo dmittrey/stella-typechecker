@@ -25,11 +25,10 @@ lookupVariantField ident fields =
             Just (NoTyping)         -> VariantFieldExistNoType
             Nothing                 -> VariantFieldMissing
 
-
 -- ====== Bind Type By Pattern ======
 
--- (-) PatternCastAs Pattern Type
--- (-) PatternAsc Pattern Type
+-- (+) PatternCastAs Pattern Type
+-- (+) PatternAsc Pattern Type
 -- (+) PatternVariant StellaIdent PatternData
 -- (+) PatternInl Pattern
 -- (+) PatternInr Pattern
@@ -46,11 +45,12 @@ lookupVariantField ident fields =
 bindPattern :: Env -> Pattern -> Type -> InferResult Env
 
 bindPattern env (PatternCastAs pat castTy) ty
-    | ty <: castTy  = bindPattern env pat castTy
-    | otherwise     = InferErr (ERROR_UNEXPECTED_SUBTYPE ty castTy)
+    | (<:=) env ty castTy = bindPattern env pat castTy
+    | otherwise     = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE castTy)
 
-bindPattern env (PatternAsc pat ascTy) ty =
-    bindPattern env pat ascTy
+bindPattern env (PatternAsc pat ascTy) ty
+    | (<:=) env ty ascTy = bindPattern env pat ascTy
+    | otherwise    = InferErr (ERROR_UNEXPECTED_PATTERN_FOR_TYPE ascTy)
 
 bindPattern env (PatternVariant ident patData) (TypeVariant fields) =
     case patData of

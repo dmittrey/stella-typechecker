@@ -2,8 +2,17 @@ module Stella.TypeCheck.Subsumption where
 
 import Stella.Abs
 
+import Stella.TypeCheck.Context
+
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+
+-- Проверка на подтип или равенство исходя из контекста
+(<:=) :: Env -> Type -> Type -> Bool
+(<:=) env subTy ty =
+    if isSubtyping env
+        then subTy <: ty
+        else subTy == ty
 
 (<:) :: Type -> Type -> Bool
 
@@ -18,7 +27,8 @@ TypeSum l1 l2 <: TypeSum r1 r2 = (l1 <: r1) && (l2 <: r2)
 
 -- ====== S-Tuple ======
 TypeTuple lTys <: TypeTuple rTys =
-    all (\lTy -> any (\rTy -> lTy <: rTy) rTys) lTys
+    length lTys == length rTys &&
+    and (zipWith (<:) lTys rTys)
 
 -- ====== S-Arrow ======
 TypeFun lParams lRet <: TypeFun rParams rRet =

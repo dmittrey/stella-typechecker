@@ -13,13 +13,6 @@ import qualified Data.Set as Set
 
 import Control.Monad (foldM)
 
--- Проверка на подтип или равенство исходя из контекста
-(<:=) :: Env -> Type -> Type -> Bool
-(<:=) env subTy ty =
-    if isSubtyping env
-        then subTy <: ty
-        else subTy == ty
-
 -- Универсальная проверка на подтип или равенство типов
 exprCheckConst :: Env -> Expr -> Type -> Type -> CheckResult
 exprCheckConst _ _ (TypeTuple lTys) (TypeTuple rTys)
@@ -138,7 +131,7 @@ exprCheck env (LetRec bindings body) tyC = do
     step :: Env -> PatternBinding -> InferResult Env
     step envAcc (APatternBinding pat e) =
         case pat of
-            PatternAsc p@(PatternVar _) tyAnn -> do
+            PatternAsc p tyAnn -> do
                 env'' <- bindPattern envAcc p tyAnn
                 exprCheck env'' e tyAnn
                 return env''
