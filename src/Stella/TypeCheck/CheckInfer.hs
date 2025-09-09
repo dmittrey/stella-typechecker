@@ -22,6 +22,8 @@ import Control.Monad (foldM)
 
 -- Универсальная проверка на подтип или равенство типов
 exprCheckConst :: Env -> Expr -> Type -> Type -> CheckResult
+exprCheckConst _ _ (TypeTuple lTys) (TypeTuple rTys)
+    | length lTys /= length rTys    = CheckErr ERROR_UNEXPECTED_TUPLE_LENGTH
 exprCheckConst env expr actualTy expectedTy
     | (<:=) env actualTy expectedTy = CheckOk
     | isSubtyping env               = CheckErr (ERROR_UNEXPECTED_SUBTYPE actualTy expectedTy)
@@ -149,12 +151,9 @@ exprCheck env (Tuple []) (TypeTuple []) =
 
 exprCheck env (Tuple (e : es)) TypeTop
     | isSubtyping env = CheckOk
-exprCheck env (Tuple (e : es)) (TypeTuple (ty : tys)) =
-    exprCheck env e ty
-    >>> exprCheck env (Tuple es) (TypeTuple tys)
-
-exprCheck env (Tuple _) (TypeTuple _) =
-    CheckErr ERROR_UNEXPECTED_TUPLE_LENGTH
+exprCheck env (Tuple (e : es)) (TypeTuple (ty : tys))
+    | length es /= length tys = CheckErr ERROR_UNEXPECTED_TUPLE_LENGTH
+    | otherwise = exprCheck env e ty >>> exprCheck env (Tuple es) (TypeTuple tys)
 
 exprCheck env expression@(Tuple _) ty =
     CheckErr (ERROR_UNEXPECTED_TUPLE expression ty)
