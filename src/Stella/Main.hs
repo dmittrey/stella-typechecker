@@ -14,6 +14,7 @@ import Stella.TypeCheck.Core
 import Stella.TypeCheck.Error
 import Stella.TypeCheck.Context
 import Stella.TypeCheck.CheckInfer
+import Stella.TypeCheck.Unification
 
 
 -- Мне по суи нужно сначала найти какой тип декларации, если тип декларации useExnTypeDecl, то обходим такие декларации и 
@@ -68,6 +69,78 @@ typeCheck (AProgram _ exts decls) =
         (CheckErr err, env)
     stepCheck (CheckOk, env) decl =
         declCheck env decl
+
+-- runTest :: String -> [UnifEq] -> IO ()
+-- runTest name eqs = do
+--     putStrLn ("=== " ++ name ++ " ===")
+--     case unifSolve eqs of
+--         Left err   -> putStrLn ("Error: " ++ show err)
+--         Right subs -> putStrLn (show subs)
+
+-- main :: IO ()
+-- main = do
+--     let tNat = aUnifType TypeNat
+--         x = aUnifVar "X"
+--         y = aUnifVar "Y"
+
+--     -- 1) X = Nat, Y = X -> X  => Y = Nat -> Nat, X = Nat
+--     runTest "basic arrow" [ UnifEq (x, tNat), UnifEq (y, aUnifArrow x x) ]
+
+--     -- 2) X = X  trivial
+--     runTest "trivial var eq" [ UnifEq (x, x) ]
+
+--     -- 3) occurs-check: X = X -> X  -> should fail (infinite)
+--     runTest "occurs-check" [ UnifEq (x, aUnifArrow x x) ]
+
+--     -- 4) type mismatch: Nat = Bool -> fail
+--     -- (assuming Type has e.g. TypeBool; adjust to your Type constructors)
+--     runTest "type mismatch" [ UnifEq (aUnifType TypeNat, aUnifType TypeBool) ]
+
+
+-- main :: IO ()
+-- main = do
+--     let 
+--         arg1 = UnifEq (aUnifVar "X", aUnifType TypeNat)
+--         arg2 = UnifEq (aUnifVar "Y", aUnifArrow (aUnifVar "X") (aUnifVar "X"))
+
+--         arg3 = UnifEq (aUnifArrow (aUnifType TypeNat) (aUnifType TypeNat), aUnifArrow (aUnifVar "X") (aUnifVar "Y"))
+
+--         arg4 = UnifEq (aUnifArrow (aUnifVar "X") (aUnifVar "Y"), aUnifArrow (aUnifVar "Y") (aUnifVar "Z"))
+--         arg5 = UnifEq (aUnifVar "Z", aUnifArrow (aUnifVar "U") (aUnifVar "W"))
+
+--         arg6 = UnifEq (aUnifType TypeNat, aUnifArrow (aUnifType TypeNat) (aUnifVar "Y"))
+
+--         arg7 = UnifEq (aUnifVar "Y", aUnifArrow (aUnifType TypeNat) (aUnifVar "Y"))
+
+--     putStrLn "Test 1:"
+--     case unifSolve [arg1, arg2] of
+--         Left err   -> putStrLn ("Error: " ++ show err)
+--         Right subs -> putStrLn (show subs)
+
+--     putStrLn "Test 2:"
+--     case unifSolve [arg3] of
+--         Left err   -> putStrLn ("Error: " ++ show err)
+--         Right subs -> putStrLn (show subs)
+
+--     putStrLn "Test 3:"
+--     case unifSolve [arg4, arg5] of
+--         Left err   -> putStrLn ("Error: " ++ show err)
+--         Right subs -> putStrLn (show subs)
+
+--     putStrLn "Test 4:"
+--     case unifSolve [arg6] of
+--         Left err   -> putStrLn ("Error: " ++ show err)
+--         Right subs -> putStrLn (show subs)
+
+--     putStrLn "Test 5:"
+--     case unifSolve [arg7] of
+--         Left err   -> putStrLn ("Error: " ++ show err)
+--         Right subs -> putStrLn (show subs)
+
+--     putStrLn "Test 6:"
+--     case unifSolve [] of
+--         Left err   -> putStrLn ("Error: " ++ show err)
+--         Right subs -> putStrLn (show subs)
 
 main :: IO ()
 main = do
