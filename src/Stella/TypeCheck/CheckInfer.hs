@@ -547,7 +547,6 @@ exprInfer env (Inr expr)
 
 -- ====== T-Variant ======
 exprInfer env expr@(Variant ident exprData)
-    | isAmbTyAsBot env = InferOk TypeBottom
     | isSubtyping env  =
         case exprData of
             NoExprData ->

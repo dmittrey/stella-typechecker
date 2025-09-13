@@ -1,0 +1,12 @@
+language core;
+extend with #records, #natural-literals, #lists;
+
+fn foo(x : { fst : Nat, snd : Nat, thd : Bool }) -> Nat {
+  return ([]).fst
+}
+
+fn main(n : Nat) -> Nat {
+  return foo({ fst = 0, snd = 0, thd = true })
+}
+
+//ERROR_AMBIGUOUS_LIST_TYPE
