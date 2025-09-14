@@ -12,8 +12,8 @@ instance Show Subs where
       where
         showPair (StellaIdent name, u) = name ++ " = " ++ show u
 
-unify :: StellaIdent -> Type -> Subs
-unify ident ty = Subs [(ident, UType ty)]
+instance Semigroup Subs where
+    (Subs a) <> (Subs b) = Subs (a ++ b)
 
 data Unif
     = UType    Type
@@ -32,7 +32,30 @@ data UnifErr
     | ERROR_UNIF_FAIL
   deriving (Eq, Ord, Show, Read)
 
-newtype UnifEq = UEq (Unif, Unif) deriving (Eq, Ord, Show, Read)
+newtype UnifEq = UEq (Unif, Unif) deriving (Eq, Ord, Read)
+
+instance Show UnifEq where
+    show (UEq (a1, a2)) = show a1 ++ " = " ++ show a2
+
+newtype UnifEqs = UnifEqs [UnifEq] deriving (Eq, Ord, Read)
+
+instance Show UnifEqs where
+    show (UnifEqs []) = "{}"
+    show (UnifEqs xs) = unlines (map showPair xs)
+      where
+        showPair (UEq (a1, a2)) = show a1 ++ " = " ++ show a2
+
+instance Semigroup UnifEqs where
+    (UnifEqs a) <> (UnifEqs b) = UnifEqs (a ++ b)
+
+unify :: Unif -> Type -> UnifEqs
+unify u ty = UnifEqs [UEq (u, UType ty)]
+
+unifyEq :: Unif -> Unif -> UnifEqs
+unifyEq u1 u2 = UnifEqs [UEq (u1, u2)]
+
+emptyUEqs :: UnifEqs
+emptyUEqs = UnifEqs []
 
 inFreeVars :: StellaIdent -> Unif -> Bool
 inFreeVars ident (UType _) =

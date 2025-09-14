@@ -6,13 +6,10 @@ import Stella.Abs
 
 import Stella.TypeCheck.Unification
 
-instance MonadFail (Either CErrType) where
-    fail _ = Left MONAD_FAIL_NOT_GUARDED_IM_BEGINNING_SORRY
-
 -- Результат проверки против типа
-type CheckResult = Either CErrType Subs
+type CheckResult = Either CErrType UnifEqs
 
-pattern CheckOk :: Subs -> CheckResult
+pattern CheckOk :: UnifEqs -> CheckResult
 pattern CheckOk e = Right e
 
 pattern CheckErr :: CErrType -> CheckResult
@@ -99,4 +96,5 @@ data CErrType
     | ERROR_UNEXPECTED_SUBTYPE Type Type -- SubType Type
     | ERROR_UNEXPECTED_REFERENCE
     | DEBUG Type
+    | DEBUGG Expr
   deriving (Eq, Ord, Show, Read)
