@@ -1,0 +1,9 @@
+language core;
+
+extend with
+#multiparameter-functions,
+  #type-reconstruction;
+
+fn test9(x : auto, y : auto) -> auto {
+  return if true then (if x then y else 0) else false
+}

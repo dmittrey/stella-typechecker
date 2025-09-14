@@ -1,0 +1,8 @@
+language core;
+
+extend with
+  #type-reconstruction;
+
+fn main(y : auto) -> auto {
+  return if y then true else false
+}

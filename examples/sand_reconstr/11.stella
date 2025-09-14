@@ -1,0 +1,10 @@
+language core;
+
+extend with
+  #multiparameter-functions,
+  #type-reconstruction;
+
+
+fn test(x : Bool, y : Bool) -> auto {
+  return test
+}
