@@ -4,7 +4,7 @@ import Stella.Abs
 
 import Data.Traversable (mapAccumL)
 
-newtype Subs = Subs [(StellaIdent, Unif)] deriving (Eq, Ord, Read)
+newtype Subs = Subs [(StellaIdent, Type)] deriving (Eq, Ord, Read)
 
 instance Show Subs where
     show (Subs []) = "{}"   -- или "∅", или "empty substitution"
@@ -15,141 +15,105 @@ instance Show Subs where
 instance Semigroup Subs where
     (Subs a) <> (Subs b) = Subs (a ++ b)
 
-data Unif
-    = UType    Type
-    | UVar     StellaIdent
-    | UArrow   Unif Unif
-  deriving (Eq, Ord, Read)
-
-instance Show Unif where
-    show (UType ty) = show ty
-    show (UVar (StellaIdent name)) = name
-    show (UArrow u1 u2) = "(" ++ show u1 ++ " -> " ++ show u2 ++ ")"
-
 data UnifErr
     = ERROR_OCCURS_CHECK_INFINITE_TYPE
     | ERROR_UNIF_NOT_EQUALS_TYPES Type Type
     | ERROR_UNIF_FAIL
   deriving (Eq, Ord, Show, Read)
 
-newtype UnifEq = UEq (Unif, Unif) deriving (Eq, Ord, Read)
+type UEq = (Type, Type)
 
-instance Show UnifEq where
-    show (UEq (a1, a2)) = show a1 ++ " = " ++ show a2
+type UEqs = [UEq]
 
-newtype UnifEqs = UnifEqs [UnifEq] deriving (Eq, Ord, Read)
+unify :: Type -> Type -> UEqs
+unify t1 t2 = [(t1, t2)]
 
-instance Show UnifEqs where
-    show (UnifEqs []) = "{}"
-    show (UnifEqs xs) = unlines (map showPair xs)
-      where
-        showPair (UEq (a1, a2)) = show a1 ++ " = " ++ show a2
+emptyUEqs :: UEqs
+emptyUEqs = []
 
-instance Semigroup UnifEqs where
-    (UnifEqs a) <> (UnifEqs b) = UnifEqs (a ++ b)
-
-unify :: Unif -> Type -> UnifEqs
-unify u ty = UnifEqs [UEq (u, UType ty)]
-
-unifyEq :: Unif -> Unif -> UnifEqs
-unifyEq u1 u2 = UnifEqs [UEq (u1, u2)]
-
-emptyUEqs :: UnifEqs
-emptyUEqs = UnifEqs []
-
-inFreeVars :: StellaIdent -> Unif -> Bool
-inFreeVars ident (UType _) =
-    False
-inFreeVars ident (UVar varIdent) =
+inFreeVars :: StellaIdent -> Type -> Bool
+inFreeVars ident (TypeVar varIdent) =
     ident == varIdent
-inFreeVars ident (UArrow lu ru) =
-    inFreeVars ident lu || inFreeVars ident ru
+inFreeVars ident (TypeFun params ret) =
+    any (inFreeVars ident) params || inFreeVars ident ret
+inFreeVars _ _ =
+    False
 
-subsUnif :: Unif -> -- In which term
+
+subsUnif :: Type -> -- In which term
             StellaIdent -> -- What we subs
-            Unif -> -- On what we subs
-            Unif -- Result
--- No changes
-subsUnif pre@(UType _) ident replaceUnif = pre
+            Type -> -- On what we subs
+            Type -- Result
 -- If varIdent match => we subs
-subsUnif pre@(UVar varIdent) ident replaceUnif
-    | varIdent == ident = replaceUnif
+subsUnif pre@(TypeVar varIdent) ident replaceType
+    | varIdent == ident = replaceType
     | otherwise         = pre
--- Recursive collect replaces UnifArrow
-subsUnif (UArrow lu ru) ident replaceUnif =
-    (UArrow (subsUnif lu ident replaceUnif) (subsUnif ru ident replaceUnif))
+-- No changes
+subsUnif pre ident replaceUnif = pre
 
 subsEq :: StellaIdent -> -- Which var we subs
-            Unif -> -- On what we subs
-            UnifEq -> 
-            UnifEq
-subsEq ident replaceUnif (UEq (lu, ru)) =
-    UEq ((subsUnif lu ident replaceUnif), (subsUnif ru ident replaceUnif))
+            Type -> -- On what we subs
+            UEq -> 
+            UEq
+subsEq ident replaceUnif (lu, ru) =
+    ((subsUnif lu ident replaceUnif), (subsUnif ru ident replaceUnif))
 
-unifSolve :: [UnifEq] -> Either UnifErr Subs
+unifSolve :: [UEq] -> Either UnifErr Subs
 -- C is emptyList => []
 unifSolve [] = do
     return (Subs [])
 
--- S = T => unify C'
-unifSolve (UEq ((UType sTy), (UType tTy)) : xs)
-    | sTy /= tTy = Left (ERROR_UNIF_NOT_EQUALS_TYPES sTy tTy)
-    | otherwise  = unifSolve xs
-
 -- trivial: same variable on both sides X = X
-unifSolve (UEq (UVar x, UVar y) : xs)
+unifSolve ((TypeVar x, TypeVar y) : xs)
     | x == y    = unifSolve xs
 
 -- S is UnifVar X && if X not in FV(T) => unify([X -> T]C') ∘ [X -> T]
-unifSolve (UEq ((UVar x), t) : xs)
+unifSolve (((TypeVar x), t) : xs)
     | inFreeVars x t  = Left ERROR_OCCURS_CHECK_INFINITE_TYPE
     | otherwise       = do
         (Subs unifToType) <- unifSolve (map (subsEq x t) xs)
         return (Subs (unifToType ++ [(x, t)]))
 
 -- T is UnifVar X && if X not in FV(S) => unify([X -> S]C') ∘ [X -> S]
-unifSolve (UEq (s, (UVar x)) : xs)
+unifSolve ((s, (TypeVar x)) : xs)
     | inFreeVars x s  = Left ERROR_OCCURS_CHECK_INFINITE_TYPE
     | otherwise       = do
         (Subs unifToType) <- unifSolve (map (subsEq x s) xs)
         return (Subs (unifToType ++ [(x, s)]))
 
 -- S is UnifArrow S1 -> S2 && T is UnifArrow T1 -> T2 => unify(C' ∪ {S1 = T1} ∪ {S2 = T2})
-unifSolve (UEq ((UArrow s1 s2), (UArrow t1 t2)) : xs) =
-    unifSolve (xs ++ [UEq (s1, t1), UEq (s2, t2)])
+unifSolve ((TypeFun sParams sRet, TypeFun tParams tRet) : xs)
+    | length sParams /= length tParams = Left ERROR_UNIF_FAIL
+    | otherwise =
+        let paramEqs = zipWith (\s t -> (s, t)) sParams tParams
+            newEqs = paramEqs ++ [(sRet, tRet)]
+        in unifSolve (xs ++ newEqs)
 
--- else FAIL
-unifSolve _ = Left ERROR_UNIF_FAIL
+-- S = T => unify C'
+unifSolve ((sTy, tTy) : xs)
+    | sTy /= tTy = Left (ERROR_UNIF_NOT_EQUALS_TYPES sTy tTy)
+    | otherwise  = unifSolve xs
 
 type LastBusyIdx = Integer
 
-freshVar :: LastBusyIdx -> (LastBusyIdx, Unif)
+freshVar :: LastBusyIdx -> (LastBusyIdx, Type)
 freshVar lastIdx =
     let idx = lastIdx + 1
-        newVar = UVar (StellaIdent ("T" ++ show idx))
+        newVar = TypeVar (StellaIdent ("T" ++ show idx))
     in (idx, newVar)
 
-freshTy :: LastBusyIdx -> Type -> (LastBusyIdx, Unif)
+freshTy :: LastBusyIdx -> Type -> (LastBusyIdx, Type)
 freshTy lastIdx TypeAuto        = freshVar lastIdx
-freshTy lastIdx (TypeVar ident) = (lastIdx, UVar ident) -- Not generate new name if ident is exist
-freshTy lastIdx ty              = (lastIdx, UType ty)
+freshTy lastIdx ty              = (lastIdx, ty)
 
-data UProgram = UProgram LanguageDecl [Extension] [UDecl]
-  deriving (Eq, Ord, Show, Read)
+type UProgram = Program
 
 freshProgram :: LastBusyIdx -> Program -> UProgram
 freshProgram lastIdx (AProgram a1 a2 decls) =
     let (_, uDecls) = mapAccumL freshDecl lastIdx decls
-    in UProgram a1 a2 uDecls
+    in AProgram a1 a2 uDecls
 
-data UDecl
-    = UDeclFun [Annotation] StellaIdent [UParamDecl] UReturnType ThrowType [UDecl] Expr
-    -- TODO
-    -- | UDeclFunGeneric [Annotation] StellaIdent [StellaIdent] [UParamDecl] UReturnType ThrowType [UDecl] Expr
-    -- | UDeclTypeAlias StellaIdent Type
-    | UDeclExceptionType Type                -- No need to reconstruct types for exceptions
-    | UDeclExceptionVariant StellaIdent Type -- Also
-    deriving (Eq, Ord, Show, Read)
+type UDecl = Decl
 
 freshDecl :: LastBusyIdx -> Decl -> (LastBusyIdx, UDecl)
 freshDecl lastIdx (DeclFun anns funIdent params retTy throwTy decls expr) =
@@ -157,21 +121,20 @@ freshDecl lastIdx (DeclFun anns funIdent params retTy throwTy decls expr) =
         (newLastIdx1, uParams) = mapAccumL freshParamDecl newLastIdx params
         (newLastIdx2, uRetTy)  = freshReturnType newLastIdx1 retTy
     in 
-        (newLastIdx2, UDeclFun anns funIdent uParams uRetTy throwTy uDecls expr)
+        (newLastIdx2, DeclFun anns funIdent uParams uRetTy throwTy uDecls expr)
 
-data UParamDecl = UParamDecl StellaIdent Unif
-  deriving (Eq, Ord, Show, Read)
+type UParamDecl = ParamDecl
 
 freshParamDecl :: LastBusyIdx -> ParamDecl -> (LastBusyIdx, UParamDecl)
 freshParamDecl lastIdx (AParamDecl ident ty) =
     let (newLastIdx, unifTy) = freshTy lastIdx ty
-    in (newLastIdx, UParamDecl ident unifTy)
+    in (newLastIdx, AParamDecl ident unifTy)
 
-data UReturnType = UNoReturnType | USomeReturnType Unif
-    deriving (Eq, Ord, Show, Read)
+type UReturnType = ReturnType
 
 freshReturnType :: LastBusyIdx -> ReturnType -> (LastBusyIdx, UReturnType)
-freshReturnType lastIdx NoReturnType = (lastIdx, UNoReturnType)
+freshReturnType lastIdx NoReturnType =
+    (lastIdx, NoReturnType)
 freshReturnType lastIdx (SomeReturnType ty) =
     let (newLastIdx, unifTy) = freshTy lastIdx ty
-    in (newLastIdx, USomeReturnType unifTy)
+    in (newLastIdx, SomeReturnType unifTy)

@@ -7,9 +7,9 @@ import Stella.Abs
 import Stella.TypeCheck.Unification
 
 -- Результат проверки против типа
-type CheckResult = Either CErrType UnifEqs
+type CheckResult = Either CErrType UEqs
 
-pattern CheckOk :: UnifEqs -> CheckResult
+pattern CheckOk :: UEqs -> CheckResult
 pattern CheckOk e = Right e
 
 pattern CheckErr :: CErrType -> CheckResult
@@ -57,7 +57,7 @@ data CErrType
     | ERROR_NOT_A_FUNCTION Expr
     | ERROR_NOT_A_TUPLE Expr
     | ERROR_NOT_A_RECORD Expr
-    | ERROR_UNEXPECTED_LAMBDA Expr Type
+    | ERROR_UNEXPECTED_LAMBDA Expr
     | ERROR_UNEXPECTED_TYPE_FOR_PARAMETER StellaIdent Type Type -- Ident Expected Got
     | ERROR_UNEXPECTED_TUPLE Expr Type
     | ERROR_UNEXPECTED_RECORD Expr Type
