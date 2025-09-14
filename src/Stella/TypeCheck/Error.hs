@@ -4,21 +4,19 @@ module Stella.TypeCheck.Error where
 
 import Stella.Abs
 
+import Stella.TypeCheck.Unification
+
 instance MonadFail (Either CErrType) where
     fail _ = Left MONAD_FAIL_NOT_GUARDED_IM_BEGINNING_SORRY
 
 -- Результат проверки против типа
-type CheckResult = Either CErrType ()
+type CheckResult = Either CErrType Subs
 
-pattern CheckOk :: CheckResult
-pattern CheckOk = Right ()
+pattern CheckOk :: Subs -> CheckResult
+pattern CheckOk e = Right e
 
 pattern CheckErr :: CErrType -> CheckResult
 pattern CheckErr e = Left e
-
-(>>>) :: CheckResult -> CheckResult -> CheckResult
-CheckOk >>> r = r
-CheckErr e >>> _ = CheckErr e
 
 -- Результат вывода чего-то
 type InferResult = Either CErrType
