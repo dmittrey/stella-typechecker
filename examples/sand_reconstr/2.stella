@@ -6,3 +6,5 @@ extend with
 fn main(y : auto) -> auto {
   return if y then true else false
 }
+
+//SUCCESS

@@ -6,3 +6,9 @@ extend with
 fn test10(z : auto) -> auto {
   return z
 }
+
+fn main(y : Nat) -> Bool {
+  return true
+}
+
+//SUCCESS

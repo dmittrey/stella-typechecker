@@ -20,6 +20,7 @@ import Debug.Trace
 
 typeCheck :: Program -> IO ()
 typeCheck (AProgram _ exts decls) =
+    -- trace (show decls) $
     let exnCtx0 = if useExnTypeDecl
                 then foldl stepExnTypeDecl ExnTypeNotDeclared decls
                 else ExnTypeNotDeclared
@@ -34,9 +35,9 @@ typeCheck (AProgram _ exts decls) =
             CheckErr err ->
                 putStrLn $ "Type error: " ++ show err
             CheckOk unifEqs -> 
-                -- putStrLn $ show env
                 case lookup (StellaIdent "main") (envVars env) of
                     Just _ ->
+                        trace (show unifEqs) $
                         case unifSolve unifEqs of
                             Left err    -> putStrLn $ "Unification error: " ++ show err
                             Right subs  -> do
@@ -46,7 +47,6 @@ typeCheck (AProgram _ exts decls) =
                         putStrLn $ "Type error: " ++ show ERROR_MISSING_MAIN
 
   where
-    -- checkForExtension :: [Extension] -> ()
     useExnTypeDecl :: Bool
     useExnTypeDecl = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#exception-type-declaration") ns) exts
 
@@ -72,10 +72,12 @@ typeCheck (AProgram _ exts decls) =
 
     -- Проверка функций и других деклараций
     stepCheck :: (CheckResult, Env) -> Decl -> (CheckResult, Env)
-    stepCheck (CheckErr err, env) decl =
-        (CheckErr err, env)
-    stepCheck (CheckOk ueqs, env) decl =
-        declCheck env decl
+    stepCheck (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
+    stepCheck (CheckOk c, envAcc) d =
+        let (res, envAcc') = declCheck envAcc d
+        in case res of
+             Left err      -> (CheckErr err, envAcc')
+             Right newEqs  -> (CheckOk (c <> newEqs), envAcc')
 
 main :: IO ()
 main = do

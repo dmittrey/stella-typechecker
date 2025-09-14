@@ -51,8 +51,12 @@ declCheck env (DeclFun anns funIdent@(StellaIdent funName) paramsAnn retTy throw
     in (combined, envWithFun)
   where
     step :: (CheckResult, Env) -> Decl -> (CheckResult, Env)
-    step (CheckOk c, envAcc) d = declCheck envAcc d
     step (CheckErr err, envAcc) _ = (CheckErr err, envAcc)
+    step (CheckOk c, envAcc) d =
+        let (res, envAcc') = declCheck envAcc d
+        in case res of
+             Left err      -> (CheckErr err, envAcc')
+             Right newEqs  -> (CheckOk (c <> newEqs), envAcc')
 
 declCheck e (DeclExceptionType _) = (CheckOk emptyUEqs, e)
 declCheck e (DeclExceptionVariant _ _) = (CheckOk emptyUEqs, e)

@@ -8,3 +8,9 @@ extend with
 fn test(x : Bool, y : Bool) -> auto {
   return test
 }
+
+fn main(y : Nat) -> Bool {
+  return true
+}
+
+//ERROR_OCCURS_CHECK_INFINITE_TYPE
