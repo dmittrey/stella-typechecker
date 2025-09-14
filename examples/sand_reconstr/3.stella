@@ -11,3 +11,5 @@ fn test3(a : auto, b : auto) -> auto {
 fn main(y : Nat) -> Bool {
   return true
 }
+
+//SUCCESS
