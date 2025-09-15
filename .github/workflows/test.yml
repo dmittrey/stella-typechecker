@@ -1,0 +1,33 @@
+name: Stella Type Checker Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup GHC
+        uses: haskell/actions/setup@v1
+        with:
+          ghc-version: "9.6.1"   # укажи вашу версию GHC
+
+      - name: Install Cabal
+        run: sudo apt-get install -y cabal-install
+
+      - name: Build Stella
+        run: |
+          cabal update
+          cabal build
+
+      - name: Run type checker tests
+        run: |
+          chmod +x ./check_dir.sh
+          ./check_dir.sh examples
