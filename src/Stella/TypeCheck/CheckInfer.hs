@@ -650,7 +650,6 @@ exprInfer env (Inl expr)
         ty <- exprInfer env expr
         InferOk (TypeSum ty (TypeVar (StellaIdent "TR"))) --TODO Обернуть бы все в State
     | otherwise        = InferErr (ERROR_AMBIGUOUS_SUM_TYPE expr)
-    
 
 -- ====== T-Inr ======
 exprInfer env (Inr expr)

@@ -15,5 +15,6 @@ data Env = Env
     , envExn  :: ExceptionContext      -- контекст типов ошибок
     , isAmbTyAsBot :: Bool             -- поддержано ли разрешение неоднозначных типов за счет TypeBottom
     , isSubtyping :: Bool              -- поддержана ли подтипизация
+    , isReconstruction :: Bool         -- поддержана ли реконструкция типов
     }
     deriving (Show, Eq)

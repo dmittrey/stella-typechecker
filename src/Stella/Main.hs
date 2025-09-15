@@ -27,7 +27,7 @@ typeCheck (AProgram _ exts decls) =
         exnCtx  = if useOpenVariantExn
                 then foldl stepOpenVariantExn exnCtx0 decls
                 else exnCtx0
-        env0 = Env { envVars = [], envExn = exnCtx, isAmbTyAsBot = useAmbTyAsBot, isSubtyping = useSubtyping }
+        env0 = Env { envVars = [], envExn = exnCtx, isAmbTyAsBot = useAmbTyAsBot, isSubtyping = useSubtyping, isReconstruction = useReconstruction }
         (checkRes, env) = foldl stepCheck (CheckOk emptyUEqs, env0) decls
     in
         -- putStrLn $ "Type error: " ++ show exnCtx
@@ -39,7 +39,7 @@ typeCheck (AProgram _ exts decls) =
                     Just _ ->
                         trace (show unifEqs) $
                         case unifSolve unifEqs of
-                            Left err    -> putStrLn $ "Unification error: " ++ show err
+                            Left err    -> putStrLn $ "Type error: " ++ show err
                             Right subs  -> do
                                 putStrLn "Type checking passed!"
                                 -- putStrLn $ "Substitutions:\n" ++ show subs
@@ -58,6 +58,9 @@ typeCheck (AProgram _ exts decls) =
 
     useSubtyping :: Bool
     useSubtyping = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#structural-subtyping") ns) exts
+
+    useReconstruction :: Bool
+    useReconstruction = any (\(AnExtension ns) -> any (\(ExtensionName n) -> n == "#type-reconstruction") ns) exts
 
     stepExnTypeDecl :: ExceptionContext -> Decl -> ExceptionContext
     stepExnTypeDecl _ (DeclExceptionType ty) = ExnTypeDecl ty
