@@ -21,9 +21,17 @@ jobs:
 
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y make
+      
+      - name: Install BNFC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y haskell-stack
+          stack setup
+          stack install BNFC
+          export PATH=$HOME/.local/bin:$PATH
 
       - name: Build Stella
-        run: make
+        run: make bnfc && make
 
       - name: Run type checker tests
         run: |
