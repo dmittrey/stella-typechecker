@@ -11,4 +11,5 @@ fn main(n : Nat) -> Nat {
   return foo(0).inner.y
 }
 
+
 //ERROR_MISSING_RECORD_FIELDS

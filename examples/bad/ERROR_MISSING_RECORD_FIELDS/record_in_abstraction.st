@@ -12,4 +12,5 @@ fn main(n : Nat) -> Nat {
   return foo(0)(succ(0)).next
 }
 
+
 //ERROR_MISSING_RECORD_FIELDS

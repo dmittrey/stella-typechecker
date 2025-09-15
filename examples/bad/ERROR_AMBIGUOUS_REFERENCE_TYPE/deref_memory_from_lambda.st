@@ -7,4 +7,5 @@ fn main(n : Nat) -> Nat {
     }) (0))
 }
 
+
 //ERROR_AMBIGUOUS_REFERENCE_TYPE

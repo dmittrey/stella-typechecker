@@ -12,4 +12,6 @@ exception type = Nat
 fn main(n : Nat) -> Top {
   return throw(true)
 }
+
+
 //ERROR_UNEXPECTED_SUBTYPE

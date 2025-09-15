@@ -5,4 +5,5 @@ fn main(n : Nat) -> Nat {
   return {0, false}(0)
 }
 
+
 //ERROR_NOT_A_FUNCTION

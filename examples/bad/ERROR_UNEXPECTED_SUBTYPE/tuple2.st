@@ -9,4 +9,6 @@ extend with #tuples,
 fn main(n : Nat) -> {Nat, Bool} {
   return {true, 12}
 }
+
+
 //ERROR_UNEXPECTED_SUBTYPE

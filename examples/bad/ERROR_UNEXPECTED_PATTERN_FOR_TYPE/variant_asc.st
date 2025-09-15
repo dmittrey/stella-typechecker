@@ -9,4 +9,5 @@ fn main(succeed : Bool) -> Nat {
     }
 }
 
+
 //ERROR_UNEXPECTED_PATTERN_FOR_TYPE

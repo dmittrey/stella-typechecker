@@ -9,4 +9,6 @@ extend with #lists,
 fn main(n : Nat) -> [Bool] {
   return cons(0, (cons(0, [])))
 }
+
+
 //ERROR_UNEXPECTED_SUBTYPE

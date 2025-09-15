@@ -12,4 +12,5 @@ fn main(n : Nat) -> Bool {
   return bar(0)
 }
 
+
 //ERROR_UNDEFINED_VARIABLE

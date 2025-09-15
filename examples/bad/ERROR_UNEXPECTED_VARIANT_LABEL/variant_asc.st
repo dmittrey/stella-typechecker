@@ -9,4 +9,6 @@ fn main(succeed : Bool) -> Nat {
         | <| c = t |> => 0
     }
 }
+
+
 //ERROR_UNEXPECTED_VARIANT_LABEL

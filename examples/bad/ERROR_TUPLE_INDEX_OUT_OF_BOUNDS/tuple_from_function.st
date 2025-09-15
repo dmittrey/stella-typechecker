@@ -9,4 +9,6 @@ fn foo(x : Nat) -> {Nat, Bool, Nat} {
 fn main(n : Nat) -> {Nat, Nat} {
   return foo(n).4 // 4 > 3
 }
+
+
 //ERROR_TUPLE_INDEX_OUT_OF_BOUNDS
