@@ -1,0 +1,12 @@
+17c17
+< all : Stella/Test
+---
+> all : Stella/Main
+29a30,32
+> Stella/Main : Stella/Abs.hs Stella/Lex.hs Stella/Par.hs Stella/Print.hs Stella/TypeCheck/Context.hs Stella/TypeCheck/Error.hs Stella/TypeCheck/Result.hs Stella/TypeCheck/Subsumption.hs Stella/TypeCheck/Unification.hs Stella/TypeCheck/Core.hs Stella/TypeCheck/CheckInfer.hs Stella/Main.hs
+> 	${GHC} ${GHC_OPTS} $@
+> 
+33a37,39
+> 	-rm -f Stella/TypeCheck/*.hi Stella/TypeCheck/*.o Stella/TypeCheck/*.log Stella/TypeCheck/*.aux Stella/TypeCheck/*.dvi
+> 	-rm -f Stella/Test
+> 	-rm -f Stella/Main

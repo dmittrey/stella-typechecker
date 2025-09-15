@@ -32,7 +32,7 @@ jobs:
           export PATH=$HOME/.local/bin:$PATH
 
       - name: Build Stella
-        run: make bnfc && make
+        run: make bnfc && patch ./src/Makefile < Makefile.diff && make
 
       - name: Run type checker tests
         run: |
