@@ -19,7 +19,7 @@ data CErrType
     | ERROR_MISSING_MAIN
     | ERROR_UNDEFINED_VARIABLE StellaIdent
     | ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION Type Type -- Expected Got
-    | ERROR_NOT_A_FUNCTION Expr
+    | ERROR_NOT_A_FUNCTION Type Expr
     | ERROR_NOT_A_TUPLE Expr
     | ERROR_NOT_A_RECORD Expr
     | ERROR_UNEXPECTED_LAMBDA Expr
@@ -150,7 +150,7 @@ unifSolve ((TypeList sElem, TypeList tElem) : xs) =
 
 -- S = T => unify C'
 unifSolve ((sTy, tTy) : xs)
-    | sTy /= tTy = Left (DEBUG sTy tTy)
+    | sTy /= tTy = Left (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION sTy tTy)
     | otherwise  = unifSolve xs
 
 -- | Генерация новых переменных для TypeAuto
@@ -320,16 +320,27 @@ freshPattern lastIdx pat = case pat of
     PatternInl p     -> let (last', uP) = freshPattern lastIdx p in (last', PatternInl uP)
     PatternInr p     -> let (last', uP) = freshPattern lastIdx p in (last', PatternInr uP)
     PatternTuple ps  -> let (last', uPs) = mapAccumL freshPattern lastIdx ps in (last', PatternTuple uPs)
-
--- freshPattern lastIdx (PatternRecord fields) =
---     let (last', uFields) = mapAccumL (\idx (name,p) -> let (idx', up) = freshPattern idx p in (idx', (name,up))) lastIdx fields
---     in (last', PatternRecord (map (uncurry LabelledPattern) uFields))
-
--- freshPattern lastIdx (PatternVariant ident maybeP) =
---     case maybeP of
---         Nothing -> (lastIdx, PatternVariant ident Nothing)
---         Just p  -> let (last', uP) = freshPattern lastIdx p
---                    in (last', PatternVariant ident (Just (PatternData uP)))
+    PatternRecord fields ->
+        let identToPattern = [(a, p) | ALabelledPattern a p <- fields]
+            (last', uFields) = mapAccumL (\idx (name,p) -> let (idx', up) = freshPattern idx p in (idx', (name,up))) lastIdx identToPattern
+        in (last', PatternRecord (map (uncurry ALabelledPattern) uFields))
+    PatternVariant ident pData ->
+        case pData of
+            NoPatternData -> (lastIdx, PatternVariant ident NoPatternData)
+            SomePatternData p ->
+                let (last', uP) = freshPattern lastIdx p
+                in (last', PatternVariant ident (SomePatternData uP))
+    PatternCastAs p t -> let (last', uP) = freshPattern lastIdx p in (last', PatternCastAs uP t)
+    PatternAsc p t    -> let (last', uP) = freshPattern lastIdx p in (last', PatternAsc uP t)
+    PatternList ps    -> let (last', uPs) = mapAccumL freshPattern lastIdx ps in (last', PatternList uPs)
+    PatternCons p1 p2 -> let (last', uP1) = freshPattern lastIdx p1
+                             (last'', uP2) = freshPattern last' p2
+                         in (last'', PatternCons uP1 uP2)
+    PatternFalse      -> (lastIdx, PatternFalse)
+    PatternTrue       -> (lastIdx, PatternTrue)
+    PatternUnit       -> (lastIdx, PatternUnit)
+    PatternInt n      -> (lastIdx, PatternInt n)
+    PatternSucc p     -> let (last', uP) = freshPattern lastIdx p in (last', PatternSucc uP)
 
 -- | ExprData внутри Variant
 freshExprData :: LastBusyIdx -> ExprData -> (LastBusyIdx, ExprData)
