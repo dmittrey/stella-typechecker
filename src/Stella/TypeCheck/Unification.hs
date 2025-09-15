@@ -61,7 +61,7 @@ data CErrType
     | ERROR_UNEXPECTED_SUBTYPE Type Type -- SubType Type
     | ERROR_UNEXPECTED_REFERENCE
     | ERROR_OCCURS_CHECK_INFINITE_TYPE
-    | DEBUG Type
+    | DEBUG Type Type
     | DEBUGG Expr
   deriving (Eq, Ord, Show, Read)
 
@@ -144,11 +144,16 @@ unifSolve ((TypeFun sParams sRet, TypeFun tParams tRet) : xs)
             newEqs = paramEqs ++ [(sRet, tRet)]
         in unifSolve (xs ++ newEqs)
 
+-- S = List S1 && T = List T1 => unify(S1 = T1)
+unifSolve ((TypeList sElem, TypeList tElem) : xs) =
+    unifSolve ((sElem, tElem) : xs)
+
 -- S = T => unify C'
 unifSolve ((sTy, tTy) : xs)
-    | sTy /= tTy = Left (ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION sTy tTy)
+    | sTy /= tTy = Left (DEBUG sTy tTy)
     | otherwise  = unifSolve xs
 
+-- | Генерация новых переменных для TypeAuto
 type LastBusyIdx = Integer
 
 freshVar :: LastBusyIdx -> (LastBusyIdx, Type)
@@ -157,39 +162,205 @@ freshVar lastIdx =
         newVar = TypeVar (StellaIdent ("T" ++ show idx))
     in (idx, newVar)
 
-freshTy :: LastBusyIdx -> Type -> (LastBusyIdx, Type)
-freshTy lastIdx TypeAuto        = freshVar lastIdx
-freshTy lastIdx ty              = (lastIdx, ty)
+-- | Основная рекурсивная замена TypeAuto во всех типах
+freshType :: LastBusyIdx -> Type -> (LastBusyIdx, Type)
+freshType lastIdx TypeAuto = freshVar lastIdx
+freshType lastIdx (TypeFun args ret) =
+    let (last', args') = mapAccumL freshType lastIdx args
+        (last'', ret') = freshType last' ret
+    in (last'', TypeFun args' ret')
+freshType lastIdx (TypeForAll vars ty) =
+    let (last', ty') = freshType lastIdx ty
+    in (last', TypeForAll vars ty')
+freshType lastIdx (TypeRec ident ty) =
+    let (last', ty') = freshType lastIdx ty
+    in (last', TypeRec ident ty')
+freshType lastIdx (TypeSum t1 t2) =
+    let (last', t1') = freshType lastIdx t1
+        (last'', t2') = freshType last' t2
+    in (last'', TypeSum t1' t2')
+freshType lastIdx (TypeTuple tys) =
+    let (last', tys') = mapAccumL freshType lastIdx tys
+    in (last', TypeTuple tys')
+freshType lastIdx (TypeList ty) =
+    let (last', ty') = freshType lastIdx ty
+    in (last', TypeList ty')
+freshType lastIdx (TypeRef ty) =
+    let (last', ty') = freshType lastIdx ty
+    in (last', TypeRef ty')
+freshType lastIdx (TypeRecord fields) =
+    let (last', fields') = mapAccumL freshRecordField lastIdx fields
+    in (last', TypeRecord fields')
+freshType lastIdx (TypeVariant fields) =
+    let (last', fields') = mapAccumL freshVariantField lastIdx fields
+    in (last', TypeVariant fields')
+freshType lastIdx ty@(TypeBool)   = (lastIdx, ty)
+freshType lastIdx ty@(TypeNat)    = (lastIdx, ty)
+freshType lastIdx ty@(TypeUnit)   = (lastIdx, ty)
+freshType lastIdx ty@(TypeTop)    = (lastIdx, ty)
+freshType lastIdx ty@(TypeBottom) = (lastIdx, ty)
+freshType lastIdx ty@(TypeVar _)  = (lastIdx, ty)
 
-type UProgram = Program
+-- | Обновление полей record
+freshRecordField :: LastBusyIdx -> RecordFieldType -> (LastBusyIdx, RecordFieldType)
+freshRecordField lastIdx (ARecordFieldType name ty) =
+    let (last', ty') = freshType lastIdx ty
+    in (last', ARecordFieldType name ty')
 
-freshProgram :: LastBusyIdx -> Program -> UProgram
+-- | Обновление полей variant
+freshVariantField :: LastBusyIdx -> VariantFieldType -> (LastBusyIdx, VariantFieldType)
+freshVariantField lastIdx (AVariantFieldType name ty) =
+    let (last', ty') = freshOptionalTyping lastIdx ty
+    in (last', AVariantFieldType name ty')
+
+-- | OptionalTyping (например SomeTyping TypeAuto)
+freshOptionalTyping :: LastBusyIdx -> OptionalTyping -> (LastBusyIdx, OptionalTyping)
+freshOptionalTyping lastIdx (SomeTyping TypeAuto) =
+    let (a, b) = freshVar lastIdx
+    in (a, SomeTyping b)
+freshOptionalTyping lastIdx ty = (lastIdx, ty)
+
+-- | Рекурсивная обработка параметров
+freshParamDecl :: LastBusyIdx -> ParamDecl -> (LastBusyIdx, ParamDecl)
+freshParamDecl lastIdx (AParamDecl ident ty) =
+    let (last', ty') = freshType lastIdx ty
+    in (last', AParamDecl ident ty')
+
+-- | Рекурсивная обработка Expr
+freshExpr :: LastBusyIdx -> Expr -> (LastBusyIdx, Expr)
+freshExpr lastIdx expr = case expr of
+    Abstraction params body ->
+        let (last', uParams) = mapAccumL freshParamDecl lastIdx params
+            (last'', uBody)   = freshExpr last' body
+        in (last'', Abstraction uParams uBody)
+    Let bindings body ->
+        let (last', uBindings) = mapAccumL freshPatternBinding lastIdx bindings
+            (last'', uBody)     = freshExpr last' body
+        in (last'', Let uBindings uBody)
+    LetRec bindings body ->
+        let (last', uBindings) = mapAccumL freshPatternBinding lastIdx bindings
+            (last'', uBody)     = freshExpr last' body
+        in (last'', LetRec uBindings uBody)
+    NatRec e1 e2 fnBody ->
+        let (last', uE1)   = freshExpr lastIdx e1
+            (last'', uE2)  = freshExpr last' e2
+            (last''', uFn) = freshExpr last'' fnBody
+        in (last''', NatRec uE1 uE2 uFn)
+    Application f args ->
+        let (last', uF)     = freshExpr lastIdx f
+            (last'', uArgs) = mapAccumL freshExpr last' args
+        in (last'', Application uF uArgs)
+    Tuple exprs ->
+        let (last', uExprs) = mapAccumL freshExpr lastIdx exprs
+        in (last', Tuple uExprs)
+    Record bindings ->
+        let (last', uBindings) = mapAccumL freshBinding lastIdx bindings
+        in (last', Record uBindings)
+    List exprs ->
+        let (last', uExprs) = mapAccumL freshExpr lastIdx exprs
+        in (last', List uExprs)
+    ConsList e1 e2 ->
+        let (last', uE1)  = freshExpr lastIdx e1
+            (last'', uE2) = freshExpr last' e2
+        in (last'', ConsList uE1 uE2)
+    Inl e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', Inl uE)
+    Inr e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', Inr uE)
+    Succ e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', Succ uE)
+    Pred e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', Pred uE)
+    Head e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', Head uE)
+    Tail e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', Tail uE)
+    IsEmpty e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', IsEmpty uE)
+    Fix e ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', Fix uE)
+    DotTuple e idx ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', DotTuple uE idx)
+    DotRecord e ident ->
+        let (last', uE) = freshExpr lastIdx e
+        in (last', DotRecord uE ident)
+    TypeAsc e ty ->
+        let (last', uTy) = freshType lastIdx ty
+            (last'', uE) = freshExpr last' e
+        in (last'', TypeAsc uE uTy)
+    TypeCast e ty ->
+        let (last', uTy) = freshType lastIdx ty
+            (last'', uE) = freshExpr last' e
+        in (last'', TypeCast uE uTy)
+    Variant ident exprData ->
+        let (last', uExprData) = freshExprData lastIdx exprData
+        in (last', Variant ident uExprData)
+    _ -> (lastIdx, expr)
+
+-- | Обработка PatternBinding
+freshPatternBinding :: LastBusyIdx -> PatternBinding -> (LastBusyIdx, PatternBinding)
+freshPatternBinding lastIdx (APatternBinding pat expr) =
+    let (last', uExpr) = freshExpr lastIdx expr
+        (last'', uPat) = freshPattern last' pat
+    in (last'', APatternBinding uPat uExpr)
+
+-- | Обработка Pattern
+freshPattern :: LastBusyIdx -> Pattern -> (LastBusyIdx, Pattern)
+freshPattern lastIdx pat = case pat of
+    PatternVar ident -> (lastIdx, PatternVar ident)
+    PatternInl p     -> let (last', uP) = freshPattern lastIdx p in (last', PatternInl uP)
+    PatternInr p     -> let (last', uP) = freshPattern lastIdx p in (last', PatternInr uP)
+    PatternTuple ps  -> let (last', uPs) = mapAccumL freshPattern lastIdx ps in (last', PatternTuple uPs)
+
+-- freshPattern lastIdx (PatternRecord fields) =
+--     let (last', uFields) = mapAccumL (\idx (name,p) -> let (idx', up) = freshPattern idx p in (idx', (name,up))) lastIdx fields
+--     in (last', PatternRecord (map (uncurry LabelledPattern) uFields))
+
+-- freshPattern lastIdx (PatternVariant ident maybeP) =
+--     case maybeP of
+--         Nothing -> (lastIdx, PatternVariant ident Nothing)
+--         Just p  -> let (last', uP) = freshPattern lastIdx p
+--                    in (last', PatternVariant ident (Just (PatternData uP)))
+
+-- | ExprData внутри Variant
+freshExprData :: LastBusyIdx -> ExprData -> (LastBusyIdx, ExprData)
+freshExprData lastIdx exprData = case exprData of
+    NoExprData     -> (lastIdx, NoExprData)
+    SomeExprData e -> let (last', uE) = freshExpr lastIdx e in (last', SomeExprData uE)
+
+-- | Binding в Record
+freshBinding :: LastBusyIdx -> Binding -> (LastBusyIdx, Binding)
+freshBinding lastIdx (ABinding name expr) =
+    let (last', uExpr) = freshExpr lastIdx expr
+    in (last', ABinding name uExpr)
+
+-- | Обновление тела функции и всех типов
+freshDecl :: LastBusyIdx -> Decl -> (LastBusyIdx, Decl)
+freshDecl lastIdx (DeclFun anns ident params retTy throwTy decls body) =
+    let (last', uDecls)  = mapAccumL freshDecl lastIdx decls
+        (last'', uParams) = mapAccumL freshParamDecl last' params
+        (last''', uRetTy) = freshReturnType last'' retTy
+        (last'''', uBody)  = freshExpr last''' body
+    in (last'''', DeclFun anns ident uParams uRetTy throwTy uDecls uBody)
+freshDecl lastIdx decl = (lastIdx, decl)
+
+freshReturnType :: LastBusyIdx -> ReturnType -> (LastBusyIdx, ReturnType)
+freshReturnType lastIdx NoReturnType = (lastIdx, NoReturnType)
+freshReturnType lastIdx (SomeReturnType ty) =
+    let (last', ty') = freshType lastIdx ty
+    in (last', SomeReturnType ty')
+
+-- | Основная функция по программе
+freshProgram :: LastBusyIdx -> Program -> Program
 freshProgram lastIdx (AProgram a1 a2 decls) =
     let (_, uDecls) = mapAccumL freshDecl lastIdx decls
     in AProgram a1 a2 uDecls
-
-type UDecl = Decl
-
-freshDecl :: LastBusyIdx -> Decl -> (LastBusyIdx, UDecl)
-freshDecl lastIdx (DeclFun anns funIdent params retTy throwTy decls expr) =
-    let (newLastIdx,  uDecls) = mapAccumL freshDecl       lastIdx  decls
-        (newLastIdx1, uParams) = mapAccumL freshParamDecl newLastIdx params
-        (newLastIdx2, uRetTy)  = freshReturnType newLastIdx1 retTy
-    in 
-        (newLastIdx2, DeclFun anns funIdent uParams uRetTy throwTy uDecls expr)
-
-type UParamDecl = ParamDecl
-
-freshParamDecl :: LastBusyIdx -> ParamDecl -> (LastBusyIdx, UParamDecl)
-freshParamDecl lastIdx (AParamDecl ident ty) =
-    let (newLastIdx, unifTy) = freshTy lastIdx ty
-    in (newLastIdx, AParamDecl ident unifTy)
-
-type UReturnType = ReturnType
-
-freshReturnType :: LastBusyIdx -> ReturnType -> (LastBusyIdx, UReturnType)
-freshReturnType lastIdx NoReturnType =
-    (lastIdx, NoReturnType)
-freshReturnType lastIdx (SomeReturnType ty) =
-    let (newLastIdx, unifTy) = freshTy lastIdx ty
-    in (newLastIdx, SomeReturnType unifTy)

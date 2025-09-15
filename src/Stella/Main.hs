@@ -42,7 +42,7 @@ typeCheck (AProgram _ exts decls) =
                             Left err    -> putStrLn $ "Unification error: " ++ show err
                             Right subs  -> do
                                 putStrLn "Type checking passed!"
-                                putStrLn $ "Substitutions:\n" ++ show subs
+                                -- putStrLn $ "Substitutions:\n" ++ show subs
                     Nothing ->
                         putStrLn $ "Type error: " ++ show ERROR_MISSING_MAIN
 
