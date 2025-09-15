@@ -17,7 +17,7 @@ jobs:
       - name: Setup GHC
         uses: haskell/actions/setup@v1
         with:
-          ghc-version: "9.6.1"
+          ghc-version: "9.4.8"
 
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y make
@@ -28,6 +28,7 @@ jobs:
           sudo apt-get install -y haskell-stack
           stack setup
           stack install BNFC
+          stack install alex happy
           export PATH=$HOME/.local/bin:$PATH
 
       - name: Build Stella
