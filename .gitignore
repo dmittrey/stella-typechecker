@@ -1,0 +1,25 @@
+# Файлы компиляции GHC
+*.o
+*.hi
+
+# Файлы вывода бинарников или исполняемых файлов
+*.exe
+*.out
+*.prof
+*.dyn_o
+
+# Каталоги сборки Stack / Cabal
+.stack-work/
+dist/
+dist-newstyle/
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.swp
+*~
+
+# IDE / Editor
+.vscode/
+.idea/
+.DS_Store
