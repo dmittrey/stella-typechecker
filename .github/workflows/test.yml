@@ -17,15 +17,13 @@ jobs:
       - name: Setup GHC
         uses: haskell/actions/setup@v1
         with:
-          ghc-version: "9.6.1"   # укажи вашу версию GHC
+          ghc-version: "9.6.1"
 
-      - name: Install Cabal
-        run: sudo apt-get install -y cabal-install
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y make
 
       - name: Build Stella
-        run: |
-          cabal update
-          cabal build
+        run: make
 
       - name: Run type checker tests
         run: |

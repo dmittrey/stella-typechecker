@@ -5,6 +5,7 @@ import Stella.TypeCheck.Context
 import Stella.TypeCheck.Subsumption
 import Stella.TypeCheck.PatternMatching
 import Stella.TypeCheck.Unification
+import Stella.TypeCheck.Result
 
 import Stella.Abs
 import Stella.ErrM

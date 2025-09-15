@@ -1,6 +1,7 @@
 module Stella.TypeCheck.PatternMatching where
 
 import Stella.TypeCheck.Error
+import Stella.TypeCheck.Result
 import Stella.TypeCheck.Context
 import Stella.TypeCheck.Subsumption
 import Stella.TypeCheck.Unification

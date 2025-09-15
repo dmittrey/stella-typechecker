@@ -11,6 +11,7 @@ import Stella.Par
 import Stella.ErrM
 
 import Stella.TypeCheck.Core
+import Stella.TypeCheck.Result
 import Stella.TypeCheck.Error
 import Stella.TypeCheck.Context
 import Stella.TypeCheck.CheckInfer

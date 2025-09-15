@@ -5,6 +5,7 @@ import Stella.TypeCheck.Context
 import Stella.TypeCheck.Subsumption
 import Stella.TypeCheck.CheckInfer
 import Stella.TypeCheck.Unification
+import Stella.TypeCheck.Result
 
 import Stella.Abs
 
